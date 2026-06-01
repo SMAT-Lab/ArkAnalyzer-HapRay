@@ -334,7 +334,7 @@ LIMIT 20;
 | [`../SKILL.md`](../SKILL.md) | CLI、契约、`gui-agent` 前置条件、独立 `.md` 命名与落盘规则 |
 | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | **帧与手势**的权威规则与 SQL；帧级指令数与帧结论须保持一致 |
 | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 当热点函数为 `[unknown]`/stripped 时**必须先执行**，再回到本文分析 |
-| [`../hapray-tool-result.md`](../hapray-tool-result.md) | 定位 `reports_path` 与契约字段 |
+| [`../schemas/hapray-tool-result.md`](../schemas/hapray-tool-result.md) | 定位 `reports_path` 与契约字段 |
 
 ---
 

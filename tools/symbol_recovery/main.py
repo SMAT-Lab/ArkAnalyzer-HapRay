@@ -8,10 +8,11 @@ import argparse
 import json
 import os
 import re
-import sqlite3
 import sys
 from pathlib import Path
 from typing import NoReturn, Optional
+
+import pandas as pd
 
 from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
@@ -21,7 +22,6 @@ from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
 from core.utils.config import (
     CALL_COUNT_ANALYSIS_PATTERN,
     CALL_COUNT_REPORT_PATTERN,
-    DEFAULT_BATCH_SIZE,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_PERF_DATA,
     DEFAULT_PERF_DB,
@@ -35,8 +35,10 @@ from core.utils.config import (
 from core.utils.logger import get_logger, setup_logging
 from core.utils.machine_output import DEFAULT_RESULT_BASENAME, build_tool_result, finalize_contract
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
+from core.utils.step2_agent import cmd_merge, cmd_openai, cmd_split
 from core.utils.symbol_replacer import (
     add_disclaimer,
+    apply_excel_mapping_to_perf_json_file,
     load_excel_data_for_report,
     load_function_mapping,
     replace_symbols_in_html,
@@ -185,8 +187,8 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=str,
         default='',
         help='KMP 模式：目标应用名称（如 "Bilibili"、"快手"），用于在 prompt 中生成对应的业务分类标签。'
-             '不传时使用通用的 "Business Logic" 描述，适用于任意 KMP 库分析。'
-             '可配合 --context 进一步注入该库的具体命名空间/组成比例信息',
+        '不传时使用通用的 "Business Logic" 描述，适用于任意 KMP 库分析。'
+        '可配合 --context 进一步注入该库的具体命名空间/组成比例信息',
     )
     parser.add_argument(
         '--html-dir',
@@ -250,7 +252,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help='批量分析时每个 prompt 包含的函数数量（不传则按服务类型自动选择：claude=10, openai=5, deepseek/poe=3）。'
-             '当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
+        '当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
     )
     parser.add_argument(
         '--use-capstone-only',
@@ -464,9 +466,7 @@ def _detect_so_column(df) -> Optional[str]:
         matched = sample[sample.str.contains(r'[\w\-\.]+\.so\+0x[0-9a-fA-F]+', case=False, regex=True)]
         if len(matched) >= max(1, len(sample) // 2):
             # 提取 SO 名写入虚拟列
-            df['_so_name_'] = df[addr_col].astype(str).str.extract(
-                r'^([\w\-\.]+\.so[^\+]*)\+', expand=False
-            )
+            df['_so_name_'] = df[addr_col].astype(str).str.extract(r'^([\w\-\.]+\.so[^\+]*)\+', expand=False)
             return '_so_name_'
 
     return None
@@ -524,8 +524,7 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     # ── 多 SO 模式：--so-dir 且 Excel 中有 SO 文件名列 ──────────────────────
     if not args.so_file and args.so_dir:
         try:
-            import pandas as _pd
-            df_peek = _pd.read_excel(excel_file, engine='openpyxl')
+            df_peek = pd.read_excel(excel_file, engine='openpyxl')
             so_col = _detect_so_column(df_peek)
             if so_col:
                 logger.info(f'🔍 Multi-SO mode: column "{so_col}" specifies SO filenames')
@@ -638,8 +637,11 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
         logger.info('Bonus Step: HTML Symbol Replacement (using Excel analysis results)')
         logger.info('=' * 80)
         html_replaced = run_html_symbol_replacement(
-            args, output_dir, excel_file_override=Path(excel_file_output),
-            show_file_path=False, show_instruction_count=False,
+            args,
+            output_dir,
+            excel_file_override=Path(excel_file_output),
+            show_file_path=False,
+            show_instruction_count=False,
         )
         if html_replaced:
             html_replaced_output = str(html_replaced)
@@ -760,16 +762,14 @@ def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, st
       - excel 模式：包含 _all_instructions / _strings / _context / _prompt / _decompiled
       - perf  模式：包含 instructions / strings(str) / decompiled / llm_result._prompt
     """
-    from pathlib import Path as _Path
-
-    out = _Path(output_dir)
+    out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
     results_data = []
     prompts_data = []
 
     for r in results:
-        so_name = _Path(r.get('so_file', '')).name
+        so_name = Path(r.get('so_file', '')).name
         llm = r.get('llm_result') or {}
         offset = r.get('offset', '')
 
@@ -781,41 +781,41 @@ def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, st
         if isinstance(raw_strings, str):
             raw_strings = [s.strip() for s in raw_strings.split(',') if s.strip()]
 
-        results_data.append({
-            'rank': r.get('rank'),
-            'address': f"{so_name}+{offset}",
-            'offset': offset,
-            'so_file': so_name,
-            'instruction_count': r.get('instruction_count', 0),
-            'inferred_name': llm.get('function_name', '') or '',
-            'description': llm.get('functionality', '') or '',
-            'performance_analysis': llm.get('performance_analysis', '') or '',
-            'confidence': llm.get('confidence', '') or '',
-            'strings': raw_strings,
-        })
+        results_data.append(
+            {
+                'rank': r.get('rank'),
+                'address': f'{so_name}+{offset}',
+                'offset': offset,
+                'so_file': so_name,
+                'instruction_count': r.get('instruction_count', 0),
+                'inferred_name': llm.get('function_name', '') or '',
+                'description': llm.get('functionality', '') or '',
+                'performance_analysis': llm.get('performance_analysis', '') or '',
+                'confidence': llm.get('confidence', '') or '',
+                'strings': raw_strings,
+            }
+        )
 
-        prompts_data.append({
-            'rank': r.get('rank'),
-            'address': f"{so_name}+{offset}",
-            'offset': offset,
-            'so_file': so_name,
-            'instruction_count': r.get('instruction_count', 0),
-            'instructions': _instructions_to_json_safe(all_insts),
-            'decompiled': r.get('_decompiled') or r.get('decompiled') or '',
-            'strings': raw_strings,
-            'context': r.get('_context', ''),
-            'prompt': (llm.get('_prompt') or r.get('_prompt') or ''),
-        })
+        prompts_data.append(
+            {
+                'rank': r.get('rank'),
+                'address': f'{so_name}+{offset}',
+                'offset': offset,
+                'so_file': so_name,
+                'instruction_count': r.get('instruction_count', 0),
+                'instructions': _instructions_to_json_safe(all_insts),
+                'decompiled': r.get('_decompiled') or r.get('decompiled') or '',
+                'strings': raw_strings,
+                'context': r.get('_context', ''),
+                'prompt': (llm.get('_prompt') or r.get('_prompt') or ''),
+            }
+        )
 
     results_path = out / 'symbol_recovery_results.json'
     prompts_path = out / 'symbol_recovery_prompts.json'
 
-    results_path.write_text(
-        json.dumps(results_data, ensure_ascii=False, indent=2, default=str), encoding='utf-8'
-    )
-    prompts_path.write_text(
-        json.dumps(prompts_data, ensure_ascii=False, indent=2, default=str), encoding='utf-8'
-    )
+    results_path.write_text(json.dumps(results_data, ensure_ascii=False, indent=2, default=str), encoding='utf-8')
+    prompts_path.write_text(json.dumps(prompts_data, ensure_ascii=False, indent=2, default=str), encoding='utf-8')
 
     logger.info(f'📄 Results JSON: {results_path}')
     logger.info(f'📄 Prompts JSON: {prompts_path}')
@@ -1069,9 +1069,8 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
             'import_applied': import_applied,
             'import_unmatched': import_unmatched,
         }
-    else:
-        logger.warning('\n⚠️  No functions were successfully analyzed')
-        return {'analysis_count': 0}
+    logger.warning('\n⚠️  No functions were successfully analyzed')
+    return {'analysis_count': 0}
 
 
 def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path) -> dict:
@@ -1151,15 +1150,19 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
             'import_applied': import_applied,
             'import_unmatched': import_unmatched,
         }
-    else:
-        logger.warning('\n⚠️  No functions were successfully analyzed')
-        return {'analysis_count': 0}
+    logger.warning('\n⚠️  No functions were successfully analyzed')
+    return {'analysis_count': 0}
 
 
-def run_html_symbol_replacement(args, output_dir: Path, excel_file_override: Path = None,
-                                show_file_path: bool = True, show_instruction_count: bool = True):
+def run_html_symbol_replacement(
+    args,
+    output_dir: Path,
+    excel_file_override: Path = None,
+    show_file_path: bool = True,
+    show_instruction_count: bool = True,
+):
     if args.skip_step4 or args.only_step1 or args.only_step3:
-        return
+        return None
 
     logger.info('\n' + '=' * 80)
     logger.info('Step 4: HTML Symbol Replacement')
@@ -1174,21 +1177,21 @@ def run_html_symbol_replacement(args, output_dir: Path, excel_file_override: Pat
         logger.warning('⚠️  Excel file does not exist: %s', excel_file)
         logger.info('   Please run Step 3 first to generate analysis results')
         logger.info('   Skipping Step 4')
-        return
+        return None
 
     html_input = detect_html_input(args)
     if not html_input or not html_input.exists():
         logger.info(f'⚠️  HTML file does not exist: {html_input if html_input else "(not specified)"}')
         logger.info('   Please use --html-input parameter to specify HTML file path or directory')
         logger.info('   Skipping Step 4')
-        return
+        return None
 
     logger.info(f'\nLoading function mapping: {excel_file}')
     function_mapping = load_function_mapping(excel_file)
     if not function_mapping:
         logger.warning('⚠️  No function name mapping found')
         logger.info('   Skipping Step 4')
-        return
+        return None
 
     logger.info(f'\nReading HTML file: {html_input}')
     with open(html_input, encoding='utf-8') as f:
@@ -1261,9 +1264,7 @@ def detect_excel_file(args, output_dir: Path) -> Optional[Path]:
             f'event_count_top{args.top_n}_analysis.xlsx'
             if args.stat_method == 'event_count'
             else f'call_count_top{args.top_n}_analysis.xlsx',
-            'event_count_top*_analysis.xlsx'
-            if args.stat_method == 'event_count'
-            else 'call_count_top*_analysis.xlsx',
+            'event_count_top*_analysis.xlsx' if args.stat_method == 'event_count' else 'call_count_top*_analysis.xlsx',
             'event_count_top*_analysis.xlsx',
             'call_count_top*_analysis.xlsx',
         ]
@@ -1439,11 +1440,9 @@ def handle_memory_mode(args, output_dir: Path):
         logger.info('   请先完成符号恢复分析')
         _exit_with_result(1, error='memory_mode_excel_not_found', output_dir=output_dir)
 
-    from core.utils.symbol_replacer import load_function_mapping, replace_symbols_in_html
-
     function_mapping = load_function_mapping(excel_file)
     logger.info(f'✅ 加载了 {len(function_mapping)} 个函数映射')
-    
+
     if len(function_mapping) == 0:
         logger.warning('⚠️  警告: 没有函数映射，可能是未使用 LLM 分析')
         logger.warning('   建议使用 LLM 分析（移除 --no-llm 参数）以获得符号恢复结果')
@@ -1457,7 +1456,7 @@ def handle_memory_mode(args, output_dir: Path):
     for html_file in html_files:
         logger.info(f'处理: {html_file.name}')
         try:
-            with open(html_file, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(html_file, encoding='utf-8', errors='ignore') as f:
                 html_content = f.read()
 
             # 替换符号
@@ -1468,7 +1467,7 @@ def handle_memory_mode(args, output_dir: Path):
             output_file = output_html_dir / html_file.name
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(replaced_html)
-            
+
             logger.info(f'    替换了 {len(replacement_info)} 个符号')
 
             logger.info(f'  ✅ 已保存: {output_file}')
@@ -1613,8 +1612,6 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
 
 def _run_apply_excel_cli(args: argparse.Namespace) -> None:
     """将符号恢复 Excel 写回 perf.json：与 perf_testing symbol_recovery_bridge 子进程 argv 一致。"""
-    from core.utils.symbol_replacer import apply_excel_mapping_to_perf_json_file
-
     if not args.symbol_mapping_excel or not args.perf_json:
         logger.error('❌ --apply-excel-to-perf-json 需要同时提供 --symbol-mapping-excel 与 --perf-json')
         sys.exit(2)
@@ -1627,10 +1624,6 @@ def _run_apply_excel_cli(args: argparse.Namespace) -> None:
 
 def _run_step2_cli(args: argparse.Namespace) -> None:
     """HapRay 集成的 Step2 子命令：与 perf_testing symbol_recovery_bridge 子进程 argv 一致。"""
-    from argparse import Namespace
-
-    from core.utils.step2_agent import cmd_merge, cmd_openai, cmd_split
-
     step2_modes = int(bool(args.step2_openai)) + int(bool(args.step2_split)) + int(bool(args.step2_merge))
     if step2_modes > 1:
         logger.error('❌ Step2 子模式三选一：请勿同时指定 --step2-openai、--step2-split、--step2-merge')
@@ -1640,7 +1633,7 @@ def _run_step2_cli(args: argparse.Namespace) -> None:
         if not args.step2_tasks or not args.step2_output:
             logger.error('❌ --step2-openai 需要同时提供 --step2-tasks 与 --step2-output')
             sys.exit(2)
-        ns = Namespace(
+        ns = argparse.Namespace(
             tasks=args.step2_tasks,
             output=args.step2_output,
             model=args.step2_model,
@@ -1653,7 +1646,7 @@ def _run_step2_cli(args: argparse.Namespace) -> None:
         if not args.step2_tasks or not args.step2_split_out_dir:
             logger.error('❌ --step2-split 需要同时提供 --step2-tasks 与 --step2-split-out-dir')
             sys.exit(2)
-        ns = Namespace(
+        ns = argparse.Namespace(
             tasks=args.step2_tasks,
             output_dir=args.step2_split_out_dir,
             batch_size=int(args.step2_split_batch_size or 10),
@@ -1664,7 +1657,7 @@ def _run_step2_cli(args: argparse.Namespace) -> None:
         if not args.step2_merge_output or not args.step2_merge_input:
             logger.error('❌ --step2-merge 需要 --step2-merge-output 且至少一条 --step2-merge-input')
             sys.exit(2)
-        ns = Namespace(output=args.step2_merge_output, result_files=list(args.step2_merge_input))
+        ns = argparse.Namespace(output=args.step2_merge_output, result_files=list(args.step2_merge_input))
         cmd_merge(ns)
         sys.exit(0)
 
@@ -1688,7 +1681,9 @@ def main():
         _run_apply_excel_cli(args)
 
     if args.prompt_only and args.import_llm_results:
-        _exit_with_result(1, error='prompt_only_conflicts_with_import', output_dir=Path(args.output_dir or DEFAULT_OUTPUT_DIR))
+        _exit_with_result(
+            1, error='prompt_only_conflicts_with_import', output_dir=Path(args.output_dir or DEFAULT_OUTPUT_DIR)
+        )
 
     # 离线导出/回填模式均不在本进程内调用 LLM
     if args.prompt_only or args.import_llm_results:

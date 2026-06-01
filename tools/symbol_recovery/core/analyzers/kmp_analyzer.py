@@ -52,7 +52,8 @@ class KMPAnalyzer(EventCountAnalyzer):
                 )
                 logger.info(
                     'KMPBatchLLMAnalyzer injected: so=%s, app=%s',
-                    so_name, app_name or '(generic)',
+                    so_name,
+                    app_name or '(generic)',
                 )
             except Exception as e:
                 logger.warning('Failed to create KMPBatchLLMAnalyzer, falling back to default: %s', e)
@@ -117,6 +118,7 @@ class KMPAnalyzer(EventCountAnalyzer):
 # Deterministic rule-based KMP category override
 # ---------------------------------------------------------------------------
 
+
 def _apply_kmp_rule_overrides(result: dict, llm_category: str) -> str:
     """根据汇编特征对 LLM 分类结果做确定性覆盖。
 
@@ -132,9 +134,10 @@ def _apply_kmp_rule_overrides(result: dict, llm_category: str) -> str:
         if not called_funcs:
             if llm_category != 'KMP Runtime':
                 logger.info(
-                    'Rule override: %s  instruction_count=%d, no external calls → '
-                    'KMP Runtime (was: %s)',
-                    result.get('address', ''), instruction_count, llm_category,
+                    'Rule override: %s  instruction_count=%d, no external calls → KMP Runtime (was: %s)',
+                    result.get('address', ''),
+                    instruction_count,
+                    llm_category,
                 )
             return 'KMP Runtime'
 
@@ -145,13 +148,10 @@ def _apply_kmp_rule_overrides(result: dict, llm_category: str) -> str:
 # Helper
 # ---------------------------------------------------------------------------
 
+
 def _add_kmp_category_column(excel_file: str, results: list) -> None:
     """在已存在的 Excel 文件中插入「KMP分类」列。"""
-    cat_map = {
-        str(r.get('address', '')).strip(): r.get('kmp_category', 'Other')
-        for r in results
-        if r.get('address')
-    }
+    cat_map = {str(r.get('address', '')).strip(): r.get('kmp_category', 'Other') for r in results if r.get('address')}
     try:
         df = pd.read_excel(excel_file, engine='openpyxl')
         df['KMP分类'] = df['地址'].apply(lambda addr: cat_map.get(str(addr).strip(), 'Other'))

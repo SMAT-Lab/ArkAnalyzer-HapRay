@@ -487,7 +487,11 @@ class EventCountAnalyzer:
                         logger.info(f'Filtering by SO file: {target_so_name}')
 
                     event_count_top = self._get_event_count_top100(
-                        cursor, file_id_to_path, name_to_data, top_n, target_so_name,
+                        cursor,
+                        file_id_to_path,
+                        name_to_data,
+                        top_n,
+                        target_so_name,
                     )
                     logger.info(
                         f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n}, inclusive; '

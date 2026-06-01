@@ -1,20 +1,26 @@
-# 数据分析子 Skill（可扩展）
+# 数据分析子 Skill（阶段 4）
 
-本目录存放 **与 HapRay 产物结合的分析知识**，按主题拆成独立 Markdown。主 Skill `../SKILL.md` 要求：**在 `perf_testing` 采集落盘后，数据分析时默认按本索引顺序逐一评估各子 Skill 并深入分析，条件不满足再跳过并写明原因**；对 `trace.db`/报告做 **深入分析**，而非仅浏览自动 HTML（详见主 Skill「数据分析默认流程（逐一子 Skill）」与「采集产物 → 应触发的子 Skill」表）。
+本目录存放 **基于 HapRay 产物的线索挖掘**（SQL、trace 深挖、动静交叉）。主 Skill [`../SKILL.md`](../SKILL.md) **§9** 要求：`gen-perf-report`（阶段 3）完成后，按本索引**逐一评估**；条件不满足则跳过并写明原因。
+
+> **与阶段 5 分工**：`analysis/` 产出**线索与假设**；仅 [`../root-cause/empty-frame.md`](../root-cause/empty-frame.md) 对**空刷**跑 `root-cause` 流水线。最终合并见 [`../report/analysis-deliverable.md`](../report/analysis-deliverable.md)（阶段 6）。
 
 ## 索引
 
 | ID | 文件 | 适用场景 | 摘要 |
 |----|------|----------|------|
-| `scroll-jank` | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | 列表/首页 **上下滑动**、周期性卡顿、掉帧、从 `trace.db` 还原手势与 jank | `frame_slice`（`depth=0` 真实帧）、`callstack` 手势与 `HandleDragUpdate`、SQL/Python 脚本、Hitrace 标记速查 |
-| `high-load` | [`high-load-analysis.md`](high-load-analysis.md) | **已采集** perf/trace/log 等数据时，基于 **原始侧** 挖掘未知问题；**不用** `summary.json` 规则化摘要作主线 | 高负载特征、`trace.db`+`hiperf`+日志、可选与 HTML 对照、独立 `.md`「新发现」；**禁止**用 summary 替代原始挖掘 |
-| `symbol-recovery` | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 同上；**新 clone 未构建**时先读 **`../SKILL.md` 源码硬门禁**与本文件 **§〇**，否则 Step1/perf→db 会先挂 | **SymRecover**（`tools/symbol_recovery` venv）；Radare2/r2dec **建议**；LLM 辅助；在线/离线/`--no-llm` |
-| `empty-frame` | [`empty-frame-root-cause.md`](empty-frame-root-cause.md) | **空刷根因**；须先完成主 Skill **§0** 索取 SO + root-cause 输入路径 | update 集成 / `root_cause.md`；自动识别源码 vs HAP；§0 未完成禁止 CLI |
+| `scroll-jank` | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | 列表/首页 **滑动**、周期性卡顿、掉帧 | `trace.db`、`frame_slice`、`HandleDragUpdate` |
+| `high-load` | [`high-load-analysis.md`](high-load-analysis.md) | 高 CPU 指令数、未知瓶颈；**不用** `summary.json` 作主线 | `perf_sample` 聚合 + 静态 SO 交叉 |
+| `symbol-recovery` | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 热点仍为 `libxxx.so+0x…`；update 后仍异常 | SymRecover venv；Radare2 **建议** |
+
+**阶段 5（非本目录）**：空刷根因 → [`../root-cause/empty-frame.md`](../root-cause/empty-frame.md)
+
+## 评估顺序
+
+1. `scroll-jank` → 2. `high-load` → 3. `symbol-recovery`  
+（有空刷信号时，阶段 5 在 analysis 之后或并行评估，见主 Skill §9）
 
 ## 新增子 Skill 时
 
-1. 在本目录新增 `*.md`（建议 `kebab-case`；专题分析类与现有文件一致，使用 **`*-analysis.md`** 后缀，如 `scroll-jank-trace-analysis.md`、`high-load-analysis.md`、`symbol-recovery-analysis.md`）。
-2. 在上表增加一行 **ID / 文件 / 适用场景 / 摘要**。
-3. 在 **`../SKILL.md`** 的「数据分析子 Skill 索引」表中同步一行，并在 `description` 或「何时使用」中补充触发词（若需要）。
-
-主 Skill **不写**与各子文档重复的长篇步骤；规则与 SQL 以子文档为唯一详述来源。执行时 Agent 须在对话中 **标明当前子 Skill ID 与文件名**（见主 Skill「执行过程输出」）。
+1. 在本目录新增 `*.md`（建议 `kebab-case`，专题类用 `*-analysis.md`）。  
+2. 更新上表与 [`../SKILL.md`](../SKILL.md) §9。  
+3. 执行时在对话中标明 **子 Skill ID + 文件名**。

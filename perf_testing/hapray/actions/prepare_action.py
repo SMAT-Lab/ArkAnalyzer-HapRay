@@ -30,6 +30,7 @@ from hapray.core.common.path_utils import HARMONY_CLI_ENV_HINT, get_user_data_ro
 from hapray.core.config.config import Config
 from hapray.core.dsl.dsl_test_runner import DSLTestRunner
 
+
 class PrepareAction:
     """Simplified test execution for preparation purposes"""
 

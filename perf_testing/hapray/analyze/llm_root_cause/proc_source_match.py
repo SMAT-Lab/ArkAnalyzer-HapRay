@@ -1,4 +1,4 @@
-"""Helpers to align /proc source hints with decompiled file paths."""
+"""Helpers to align /proc source hints with application source file paths."""
 
 from __future__ import annotations
 
@@ -24,13 +24,15 @@ def source_path_aligned(candidate_file: str, source_path: str) -> bool:
     cf_base = cf.rsplit('/', 1)[-1]
     for sp_name in basename_variants(sp_base):
         for cf_name in basename_variants(cf_base):
-            if sp_name.lower() == cf_name.lower() and (cf.endswith('/' + cf_name.lower()) or cf.endswith(cf_name.lower())):
+            if sp_name.lower() == cf_name.lower() and (
+                cf.endswith('/' + cf_name.lower()) or cf.endswith(cf_name.lower())
+            ):
                 return True
     return bool(sp_base) and (cf.endswith('/' + sp_base) or cf.endswith(sp_base))
 
 
-def resolve_decompiled_file(decompiled_root: Path, source_path: str) -> Path | None:
-    """Find a .ts/.ets/.js file under decompiled_root matching source_path basename."""
+def resolve_source_file(source_root: Path, source_path: str) -> Path | None:
+    """Find a .ts/.ets/.js file under source_root matching source_path basename."""
     sp = normalize_path(source_path)
     if not sp:
         return None
@@ -41,17 +43,20 @@ def resolve_decompiled_file(decompiled_root: Path, source_path: str) -> Path | N
     best: Path | None = None
     best_score = -1
     for candidate_base in basename_variants(base):
-        for path in decompiled_root.rglob(candidate_base):
+        for path in source_root.rglob(candidate_base):
             if not path.is_file():
                 continue
-            rel = normalize_path(str(path.relative_to(decompiled_root))).lower()
+            rel = normalize_path(str(path.relative_to(source_root))).lower()
             score = 0
             if rel.endswith(sp.lower()):
                 score += 100
             sp_lower = sp.lower()
-            if sp_lower.endswith('.ets') and rel.endswith(sp_lower[:-4] + '.ts'):
-                score += 90
-            elif sp_lower.endswith('.ts') and rel.endswith(sp_lower[:-3] + '.ets'):
+            if (
+                sp_lower.endswith('.ets')
+                and rel.endswith(sp_lower[:-4] + '.ts')
+                or sp_lower.endswith('.ts')
+                and rel.endswith(sp_lower[:-3] + '.ets')
+            ):
                 score += 90
             for part in tail_parts[-3:]:
                 if part.lower() in rel:
@@ -68,7 +73,7 @@ def pick_aligned_candidates(
     *,
     allow_fallback: bool = False,
 ) -> list[dict[str, Any]]:
-    """Return only candidates whose decompiled path matches /proc source_path."""
+    """Return only candidates whose source file path matches /proc source_path."""
     source = hint.get('source_path', '')
     aligned = [c for c in candidates if source_path_aligned(c.get('file', ''), source)]
     if aligned:

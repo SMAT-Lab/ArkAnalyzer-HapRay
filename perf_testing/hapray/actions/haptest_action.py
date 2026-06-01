@@ -29,6 +29,7 @@ from hapray.core.common.path_utils import HARMONY_CLI_ENV_HINT, get_reports_root
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator
 
+
 class HapTestAction:
     """Strategy-driven UI automation with performance capture"""
 

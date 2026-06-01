@@ -180,19 +180,19 @@ cd perf_testing
 # 仅生成规则引擎证据报告（无 LLM，适合验证调试）
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index \
+  --index-dir <source_dir>/index \
   --skip-llm
 
 # analyze 模式（默认）：LLM 从证据独立推断根因，输出嫌疑函数 + 修复建议
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index
+  --index-dir <source_dir>/index
 
-# with_source 模式（增强）：提供反编译源码后自动启用，LLM 阅读代码给出行级修复建议
+# with_source 模式（增强）：提供应用源码后自动启用，LLM 阅读代码给出行级修复建议
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index \
-  --decompiled-dir <decompiled_dir>
+  --index-dir <source_dir>/index \
+  --source-dir <source_dir>
 ```
 
 **Agent 编排（默认，和 symbol recovery/skills 保持一致）：**
@@ -220,16 +220,16 @@ LLM_MODEL=GPT-5
 
 Options:
 - `--report-dir <path>`: HapRay 报告目录，含 `summary.json`、`trace_emptyFrame.json`（必填）
-- `--index-dir <path>`: 反编译代码索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），推荐提供
-- `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 with_source 模式
-- `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `with_source`（LLM 阅读反编译代码，行级修复建议）
+- `--index-dir <path>`: 源码索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），推荐提供
+- `--source-dir <path>`: 应用源码目录（`*.ts` / `*.ets` / `*.callgraph.json`），提供后自动切换 with_source 模式
+- `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `with_source`（LLM 阅读源码，行级修复建议）
 - `--llm-tokens <path>`: 旧版兼容入口；推荐使用统一 `.env` / 环境变量
 - `--api-key / --base-url / --model`: 旧版单次覆盖入口；推荐使用统一 `.env` / 环境变量
 - `HAPRAY_ROOT_CAUSE_EXECUTION`: `agent`（默认）/ `api` / `auto`
 - `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）
 - `--skip-llm`: 跳过 LLM，`root_cause.md` 内容与 `root_cause_evidence.md` 相同
 
-详细说明参见 [`skills/hapray/analysis/empty-frame-root-cause.md`](skills/hapray/analysis/empty-frame-root-cause.md)。
+详细说明参见 [`skills/hapray/root-cause/empty-frame.md`](skills/hapray/root-cause/empty-frame.md)。
 
 #### Static Analysis (`static`)
 ```bash

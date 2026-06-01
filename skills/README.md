@@ -11,7 +11,9 @@ skills/
     ├── SKILL.md              # 必填：YAML frontmatter + 正文
     ├── reference.md          # 可选：参数表、长文档
     ├── examples.md           # 可选：自然语言示例
-    ├── hapray-tool-result.md # 可选：hapray-tool-result.json 字段速查（Schema 在仓库 docs/schemas/）
+    ├── schemas/              # CLI 契约（发布包可用，不依赖 docs/）
+    │   ├── hapray-tool-result-v1.json
+    │   └── hapray-tool-result.md
     └── analysis/             # 可选：数据分析子 Skill（多专题 Markdown，由主 SKILL 索引）
         ├── README.md         # 子 Skill 索引表
         └── <topic>.md        # 各专题长文档（如 scroll-jank-trace-analysis.md）

@@ -1,6 +1,6 @@
 [package]
 name = "arkanalyzer-hapray"
-version = "1.5.4"
+version = "1.5.5"
 description = "a tool designed for performance analysis of OpenHarmony applications."
 authors = ["sunbo"]
 edition = "2024"

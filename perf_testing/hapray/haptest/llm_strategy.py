@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import base64
+import copy
 import json
 import logging
 import os
@@ -22,9 +23,11 @@ import time
 from datetime import datetime
 from typing import Optional
 
+import requests
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
 
+from hapray.haptest.llm_state_comparator import LLMStateComparator
 from hapray.haptest.state_manager import StateManager, StateStackEntry, TestContext, UIState
 from hapray.haptest.strategy import BaseStrategy
 
@@ -41,7 +44,14 @@ class LLMStrategy(BaseStrategy):
     优先探索3级页面深度
     """
 
-    def __init__(self, api_key: str = None, model: str = None, target_depth: int = 3, base_url: str = None, use_llm_state_comparison: bool = True):
+    def __init__(
+        self,
+        api_key: str = None,
+        model: str = None,
+        target_depth: int = 3,
+        base_url: str = None,
+        use_llm_state_comparison: bool = True,
+    ):
         """
         初始化LLM策略
 
@@ -62,7 +72,7 @@ class LLMStrategy(BaseStrategy):
         self.state_stack = []  # 状态栈,用于跟踪导航深度
         self.last_state_hash = None  # 上一个状态的哈希
         self.action_history = []  # 操作历史记录
-        self.last_page_description = ""  # 最后一次LLM生成的页面描述
+        self.last_page_description = ''  # 最后一次LLM生成的页面描述
         self.last_decision = {}  # 最后一次LLM决策的完整信息
 
         # LLM state comparator (lazy init)
@@ -71,7 +81,9 @@ class LLMStrategy(BaseStrategy):
         if not self.api_key:
             Log.warning('LLM API key not found. Set OPENAI_API_KEY environment variable.')
 
-        Log.info(f'[LLM] 初始化 - Model: {self.model}, Base URL: {self.base_url}, Target Depth: {self.target_depth}, LLM Comparison: {use_llm_state_comparison}')
+        Log.info(
+            f'[LLM] 初始化 - Model: {self.model}, Base URL: {self.base_url}, Target Depth: {self.target_depth}, LLM Comparison: {use_llm_state_comparison}'
+        )
 
     def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
@@ -134,7 +146,14 @@ class LLMStrategy(BaseStrategy):
             # 降级到简单策略
             return self._fallback_strategy(unvisited)
 
-    def update_depth_after_action(self, action_type: str, prev_ui_state: UIState, new_ui_state: UIState, target: Optional[dict] = None, report_path: str = None):
+    def update_depth_after_action(
+        self,
+        action_type: str,
+        prev_ui_state: UIState,
+        new_ui_state: UIState,
+        target: Optional[dict] = None,
+        report_path: str = None,
+    ):
         """
         在执行操作后更新深度 (Enhanced with LLM comparison)
 
@@ -150,16 +169,10 @@ class LLMStrategy(BaseStrategy):
             self._update_depth_hash_based(action_type, prev_ui_state.state_hash, new_ui_state.state_hash)
             return
 
-        
-
         # Initialize LLM comparator if needed
         if self.llm_comparator is None:
-            from hapray.haptest.llm_state_comparator import LLMStateComparator
             self.llm_comparator = LLMStateComparator(
-                api_key=self.api_key,
-                model=self.model,
-                base_url=self.base_url,
-                enable_parallel=True
+                api_key=self.api_key, model=self.model, base_url=self.base_url, enable_parallel=True
             )
 
         # Initialize on first call - add prev_ui_state as initial state
@@ -172,40 +185,35 @@ class LLMStrategy(BaseStrategy):
                 step_id=prev_ui_state.step_id,
                 timestamp=time.time(),
                 element_count=len(prev_ui_state.clickable_elements),
-                depth=0
+                depth=0,
             )
             self.state_stack.append(entry)
             self.current_depth = 0
             Log.info('[LLM] Initialized state stack with initial state')
             # Don't return - continue to process new_ui_state
-        
+
         # Save stack before for visualization
-        import copy
         stack_before = copy.deepcopy(self.state_stack)
         depth_before = self.current_depth
 
         # Don't generate description for new_ui_state - will be backfilled in next iteration
-        new_description = ""  # Empty string, will be filled later
+        new_description = ''  # Empty string, will be filled later
 
         # Create test context
         test_context = TestContext(
-            app_package=new_ui_state.app_package or "Unknown",
+            app_package=new_ui_state.app_package or 'Unknown',
             app_name=new_ui_state.app_name,
             target_depth=self.target_depth,
             current_depth=self.current_depth,
-            test_goal="Explore the UI up to the third-level page"
+            test_goal='Explore the UI up to the third-level page',
         )
 
         is_new_state = False
         matching_idx = None
 
-        
         # Compare new state with stack
         is_new_state, matching_idx = self.llm_comparator.compare_with_stack(
-            new_ui_state,
-            new_description,
-            self.state_stack,
-            test_context
+            new_ui_state, new_description, self.state_stack, test_context
         )
 
         if is_new_state:
@@ -217,19 +225,17 @@ class LLMStrategy(BaseStrategy):
                 step_id=new_ui_state.step_id,
                 timestamp=time.time(),
                 element_count=len(new_ui_state.clickable_elements),
-                depth=len(self.state_stack)
+                depth=len(self.state_stack),
             )
             self.state_stack.append(entry)
             self.current_depth = len(self.state_stack) - 1
             Log.info(f'[LLM] Entered new page (depth={self.current_depth}): {new_description[:50]}...')
         else:
             # Returned to existing state
-            self.state_stack = self.state_stack[:matching_idx + 1]
+            self.state_stack = self.state_stack[: matching_idx + 1]
             self.state_stack[matching_idx].visit_count += 1
             self.current_depth = matching_idx
             Log.info(f'[LLM] Returned to existing state (depth={self.current_depth})')
-
-        
 
         # Generate visualization if report_path is provided
         if report_path and self.llm_comparator:
@@ -249,7 +255,7 @@ class LLMStrategy(BaseStrategy):
                 matching_idx=matching_idx,
                 stack_after=self.state_stack,
                 depth_before=depth_before,
-                depth_after=depth_after
+                depth_after=depth_after,
             )
 
     def _update_depth_hash_based(self, action_type: str, prev_state_hash: str, new_state_hash: str):
@@ -313,13 +319,12 @@ class LLMStrategy(BaseStrategy):
 
         # 从后向前查找第一个空描述的entry
         for entry in reversed(self.state_stack):
-            if not entry.description or entry.description == "":
+            if not entry.description or entry.description == '':
                 entry.description = description
                 Log.info(f'[LLM] Backfilled description to stack entry (step {entry.step_id}): {description[:50]}...')
                 return
 
         Log.debug('[LLM] No empty description entry found in stack for backfill')
-
 
     def _generate_depth_visualization(
         self,
@@ -335,7 +340,7 @@ class LLMStrategy(BaseStrategy):
         matching_idx: Optional[int],
         stack_after: list,
         depth_before: int,
-        depth_after: int
+        depth_after: int,
     ):
         """
         生成深度计算可视化 HTML
@@ -356,8 +361,6 @@ class LLMStrategy(BaseStrategy):
             depth_after: 计算后深度
         """
         try:
-            import os
-
             # 创建输出目录
             ui_dir = os.path.join(report_path, 'ui', f'step{step_id}')
             os.makedirs(ui_dir, exist_ok=True)
@@ -378,7 +381,7 @@ class LLMStrategy(BaseStrategy):
                 matching_idx,
                 stack_after,
                 depth_before,
-                depth_after
+                depth_after,
             )
 
             # 写入文件
@@ -404,7 +407,7 @@ class LLMStrategy(BaseStrategy):
         matching_idx: Optional[int],
         stack_after: list,
         depth_before: int,
-        depth_after: int
+        depth_after: int,
     ) -> str:
         """构建可视化 HTML 内容"""
 
@@ -539,7 +542,7 @@ class LLMStrategy(BaseStrategy):
         """
 
         # 构建栈前状态 HTML
-        stack_before_html = self._build_stack_html(stack_before, report_path, step_id, "before")
+        stack_before_html = self._build_stack_html(stack_before, report_path, step_id, 'before')
 
         # 构建当前状态 HTML (展示操作前后的两个状态)
         current_state_html = self._build_current_state_html(prev_ui_state, new_ui_state, action_type, target)
@@ -548,15 +551,13 @@ class LLMStrategy(BaseStrategy):
         comparison_table_html = self._build_comparison_table_html(comparison_results)
 
         # 构建决策信息
-        decision_html = self._build_decision_html(
-            action_type, is_new_state, matching_idx, depth_before, depth_after
-        )
+        decision_html = self._build_decision_html(action_type, is_new_state, matching_idx, depth_before, depth_after)
 
         # 构建栈后状态 HTML
-        stack_after_html = self._build_stack_html(stack_after, report_path, step_id, "after", matching_idx)
+        stack_after_html = self._build_stack_html(stack_after, report_path, step_id, 'after', matching_idx)
 
         # 组装完整 HTML
-        html = f"""<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -603,29 +604,27 @@ class LLMStrategy(BaseStrategy):
 </body>
 </html>"""
 
-        return html
-
-    def _build_stack_html(self, stack: list, report_path: str, current_step: int, stage: str, highlight_idx: Optional[int] = None) -> str:
+    def _build_stack_html(
+        self, stack: list, report_path: str, current_step: int, stage: str, highlight_idx: Optional[int] = None
+    ) -> str:
         """构建栈的 HTML"""
         if not stack:
-            return "<p>Empty stack</p>"
+            return '<p>Empty stack</p>'
 
         html_parts = []
         for idx, entry in enumerate(stack):
             # 确定 CSS 类
-            css_class = "state-card"
-            if stage == "after" and highlight_idx is not None and idx == highlight_idx:
-                css_class += " matched"
+            css_class = 'state-card'
+            if stage == 'after' and highlight_idx is not None and idx == highlight_idx:
+                css_class += ' matched'
 
             # 计算相对路径
-            screenshot_rel_path = self._get_relative_screenshot_path(
-                entry.screenshot_path, report_path, current_step
-            )
+            screenshot_rel_path = self._get_relative_screenshot_path(entry.screenshot_path, report_path, current_step)
 
             # 截断描述
-            description = entry.description[:100] + "..." if len(entry.description) > 100 else entry.description
+            description = entry.description[:100] + '...' if len(entry.description) > 100 else entry.description
             if not description:
-                description = "[Empty - will be backfilled]"
+                description = '[Empty - will be backfilled]'
 
             html_parts.append(f"""
             <div class="{css_class}" style="max-width:300px">
@@ -638,23 +637,25 @@ class LLMStrategy(BaseStrategy):
             </div>
             """)
 
-        return "\n".join(html_parts)
+        return '\n'.join(html_parts)
 
-    def _build_current_state_html(self, prev_ui_state: UIState, new_ui_state: UIState, action_type: str, target: Optional[dict] = None) -> str:
+    def _build_current_state_html(
+        self, prev_ui_state: UIState, new_ui_state: UIState, action_type: str, target: Optional[dict] = None
+    ) -> str:
         """构建当前状态的 HTML - 展示操作前后的两个状态"""
         prev_description = getattr(prev_ui_state, '_llm_description', '')
         if not prev_description:
-            prev_description = "[Empty - will be backfilled in next iteration]"
+            prev_description = '[Empty - will be backfilled in next iteration]'
 
         new_description = getattr(new_ui_state, '_llm_description', '')
         if not new_description:
-            new_description = "[Empty - will be backfilled in next iteration]"
+            new_description = '[Empty - will be backfilled in next iteration]'
 
         # 获取LLM决策信息
         prev_decision = getattr(prev_ui_state, '_llm_decision', {})
 
         # 构建操作信息 - 使用LLM决策信息
-        action_info = f"<strong>Action:</strong> <span class=\"badge badge-info\">{action_type.upper()}</span>"
+        action_info = f'<strong>Action:</strong> <span class="badge badge-info">{action_type.upper()}</span>'
 
         # 显示LLM决策的详细信息
         if prev_decision:
@@ -663,27 +664,27 @@ class LLMStrategy(BaseStrategy):
             element_idx = prev_decision.get('element_index', None)
 
             if page_desc:
-                action_info += f"<br><br><strong>Page Analysis:</strong><br><em>{page_desc}</em>"
+                action_info += f'<br><br><strong>Page Analysis:</strong><br><em>{page_desc}</em>'
 
             if brief:
-                action_info += f"<br><br><strong>Decision Brief:</strong><br><em>{brief}</em>"
+                action_info += f'<br><br><strong>Decision Brief:</strong><br><em>{brief}</em>'
 
             if element_idx is not None:
-                action_info += f"<br><br><strong>Element Index:</strong> {element_idx}"
+                action_info += f'<br><br><strong>Element Index:</strong> {element_idx}'
 
         # 如果有target信息，也显示
         if target and action_type == 'click':
             target_text = target.get('text', '')
             target_type = target.get('type', '')
             target_id = target.get('id', '')
-            action_info += f"<br><br><strong>Target Type:</strong> {target_type}"
+            action_info += f'<br><br><strong>Target Type:</strong> {target_type}'
             if target_text:
                 action_info += f"<br><strong>Target Text:</strong> '{target_text}'"
             if target_id:
-                action_info += f"<br><strong>Target ID:</strong> {target_id}"
+                action_info += f'<br><strong>Target ID:</strong> {target_id}'
         elif target and action_type == 'scroll':
             direction = target.get('direction', 'unknown')
-            action_info += f"<br><br><strong>Scroll Direction:</strong> {direction}"
+            action_info += f'<br><br><strong>Scroll Direction:</strong> {direction}'
 
         return f"""
         <div style="display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap;">
@@ -715,18 +716,18 @@ class LLMStrategy(BaseStrategy):
     def _build_comparison_table_html(self, comparison_results: list) -> str:
         """构建比较结果表格的 HTML"""
         if not comparison_results:
-            return "<p>No comparison results available</p>"
+            return '<p>No comparison results available</p>'
 
         rows = []
         for idx, result in enumerate(comparison_results):
-            row_class = "same-state" if result.is_same_state else "diff-state"
-            is_same_icon = "✅ Yes" if result.is_same_state else "❌ No"
+            row_class = 'same-state' if result.is_same_state else 'diff-state'
+            is_same_icon = '✅ Yes' if result.is_same_state else '❌ No'
 
             # 截断 reasoning
-            reasoning = result.reasoning[:80] + "..." if len(result.reasoning) > 80 else result.reasoning
+            reasoning = result.reasoning[:80] + '...' if len(result.reasoning) > 80 else result.reasoning
 
             # 格式化 key_differences
-            differences = ", ".join(result.key_differences[:3]) if result.key_differences else "None"
+            differences = ', '.join(result.key_differences[:3]) if result.key_differences else 'None'
 
             rows.append(f"""
             <tr class="{row_class}">
@@ -752,34 +753,29 @@ class LLMStrategy(BaseStrategy):
                 </tr>
             </thead>
             <tbody>
-                {"".join(rows)}
+                {''.join(rows)}
             </tbody>
         </table>
         """
 
     def _build_decision_html(
-        self,
-        action_type: str,
-        is_new_state: bool,
-        matching_idx: Optional[int],
-        depth_before: int,
-        depth_after: int
+        self, action_type: str, is_new_state: bool, matching_idx: Optional[int], depth_before: int, depth_after: int
     ) -> str:
         """构建决策信息的 HTML"""
         if is_new_state:
-            operation = "Add new state to stack"
-            badge_class = "badge-success"
+            operation = 'Add new state to stack'
+            badge_class = 'badge-success'
         else:
-            operation = f"Navigate back to existing state (index {matching_idx})"
-            badge_class = "badge-info"
+            operation = f'Navigate back to existing state (index {matching_idx})'
+            badge_class = 'badge-info'
 
-        depth_change = f"{depth_before} → {depth_after}"
+        depth_change = f'{depth_before} → {depth_after}'
         if depth_after > depth_before:
-            depth_icon = "📈"
+            depth_icon = '📈'
         elif depth_after < depth_before:
-            depth_icon = "📉"
+            depth_icon = '📉'
         else:
-            depth_icon = "➡️"
+            depth_icon = '➡️'
 
         return f"""
         <div class="decision-box">
@@ -793,7 +789,6 @@ class LLMStrategy(BaseStrategy):
 
     def _get_relative_screenshot_path(self, screenshot_path: str, report_path: str, current_step: int) -> str:
         """获取截图的相对路径"""
-        import os
         # 从绝对路径提取 step 信息
         # screenshot_path 格式: .../ui/stepX/screenshot_current_1.png
         # 需要返回相对于当前 stepY 的路径: ../../stepX/screenshot_current_1.png
@@ -801,17 +796,16 @@ class LLMStrategy(BaseStrategy):
         try:
             # 提取 stepX
             parts = screenshot_path.split(os.sep)
-            for i, part in enumerate(parts):
+            for _i, part in enumerate(parts):
                 if part.startswith('step') and part[4:].isdigit():
                     step_num = part[4:]
                     filename = parts[-1]
-                    return f"../step{step_num}/{filename}"
+                    return f'../step{step_num}/{filename}'
         except Exception:
             pass
 
         # 降级：返回文件名
         return os.path.basename(screenshot_path)
-
 
     def _generate_fallback_description(self, ui_state: UIState) -> str:
         """
@@ -822,13 +816,11 @@ class LLMStrategy(BaseStrategy):
             elem_type = elem.get('type', 'Unknown')
             element_types[elem_type] = element_types.get(elem_type, 0) + 1
 
-        type_summary = ', '.join([f"{count} {type}" for type, count in element_types.items()])
+        type_summary = ', '.join([f'{count} {type}' for type, count in element_types.items()])
 
-        return f"Page with {len(ui_state.clickable_elements)} clickable elements: {type_summary}"
+        return f'Page with {len(ui_state.clickable_elements)} clickable elements: {type_summary}'
 
-    def _call_llm_api(
-        self, ui_state: UIState, unvisited: list, state_mgr: StateManager
-    ) -> tuple[str, Optional[dict]]:
+    def _call_llm_api(self, ui_state: UIState, unvisited: list, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
         调用LLM API进行决策
 
@@ -850,8 +842,6 @@ class LLMStrategy(BaseStrategy):
         prompt = self._build_prompt(ui_state, unvisited, state_mgr)
 
         # 调用OpenAI API
-        import requests
-
         headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {self.api_key}'}
 
         payload = {
@@ -868,9 +858,7 @@ class LLMStrategy(BaseStrategy):
             # 'max_tokens': 500,
         }
 
-        response = requests.post(
-            f'{self.base_url}/chat/completions', headers=headers, json=payload, timeout=300
-        )
+        response = requests.post(f'{self.base_url}/chat/completions', headers=headers, json=payload, timeout=300)
 
         if response.status_code != 200:
             raise RuntimeError(f'API调用失败: {response.status_code} - {response.text}')
@@ -943,7 +931,7 @@ class LLMStrategy(BaseStrategy):
         """构建LLM提示词"""
         # 提取元素信息
         elements_info = []
-        for idx, elem in enumerate(unvisited):  
+        for idx, elem in enumerate(unvisited):
             elem_text = elem.get('text', '')
             elem_type = elem.get('type', '')
             elem_id = elem.get('id', '')
@@ -953,7 +941,7 @@ class LLMStrategy(BaseStrategy):
 
         # 构建历史记录字符串
         if self.action_history:
-            history_str = '\n'.join([f"{i + 1}. {h}" for i, h in enumerate(self.action_history)])
+            history_str = '\n'.join([f'{i + 1}. {h}' for i, h in enumerate(self.action_history)])
         else:
             history_str = '暂无历史操作'
 
@@ -1008,7 +996,7 @@ class LLMStrategy(BaseStrategy):
 - {{"page_description": "描述", "action": "stop", "brief": "描述"}} - 停止探索
 
 请直接返回JSON,不要包含其他文字。"""
-        
+
         Log.debug(prompt)
 
         return prompt
@@ -1035,7 +1023,7 @@ class LLMStrategy(BaseStrategy):
                 'action': action,
                 'brief': brief,
                 'element_index': decision.get('element_index', None),
-                'direction': decision.get('direction', None)
+                'direction': decision.get('direction', None),
             }
 
             # Store page description for later use in state comparison
@@ -1047,7 +1035,7 @@ class LLMStrategy(BaseStrategy):
 
             # 记录到历史
             if brief and page_description:
-                self.action_history.append(f"{page_description}。{brief}(当前深度：{self.current_depth})")
+                self.action_history.append(f'{page_description}。{brief}(当前深度：{self.current_depth})')
                 if len(self.action_history) > 10:
                     self.action_history.pop(0)
 

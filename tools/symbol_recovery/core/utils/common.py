@@ -214,8 +214,14 @@ def format_function_name(function_name: str) -> str:
     return f'Function: {function_name}'
 
 
-def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺失符号函数分析报告',
-                       show_file_path=True, show_instruction_count=True):
+def render_html_report(
+    results,
+    llm_analyzer=None,
+    time_tracker=None,
+    title='缺失符号函数分析报告',
+    show_file_path=True,
+    show_instruction_count=True,
+):
     """渲染 HTML 报告内容"""
     use_event_count = any('event_count' in r and r.get('event_count', 0) > 0 for r in results)
     use_call_count = any(r.get('call_count', 0) > 0 for r in results)

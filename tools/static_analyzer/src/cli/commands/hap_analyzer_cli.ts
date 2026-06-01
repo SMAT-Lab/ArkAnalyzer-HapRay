@@ -34,6 +34,11 @@ interface AnalyzeOptions {
 
 const VERSION = '1.0.0';
 
+interface RootCliOptions {
+    resultFile?: string;
+    machineJson?: boolean;
+}
+
 export const HapAnalyzerCli = new Command('hap')
     .version(VERSION)
     .description('HAP 静态分析器 - 分析 HAP/ZIP 文件或目录中的技术栈与资源')
@@ -52,11 +57,11 @@ export const HapAnalyzerCli = new Command('hap')
     )
     .action(async (options: AnalyzeOptions) => {
         // 根命令 hapray-sa-cmd 上的 --result-file / --machine-json（GUI 在 hapray hap 之前注入）
-        const root = program.opts() as { resultFile?: string; machineJson?: boolean };
+        const root = program.opts<RootCliOptions>();
         const merged: AnalyzeOptions = {
             ...options,
             resultFile: options.resultFile ?? root.resultFile,
-            machineJson: Boolean(options.machineJson || root.machineJson),
+            machineJson: Boolean(options.machineJson ?? root.machineJson),
         };
         await analyzeHap(merged);
     });

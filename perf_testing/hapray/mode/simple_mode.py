@@ -397,10 +397,7 @@ def _copy_hiperf_html_file(perf_path: str, hiperf_step_dir: str) -> Optional[str
         idx = data.find(_SR_EMBED_MARKER)
         if idx != -1:
             close_body = data.rfind(b'</body>')
-            if close_body != -1 and idx < close_body:
-                data = data[:idx] + data[close_body:]
-            else:
-                data = data[:idx]
+            data = data[:idx] + data[close_body:] if close_body != -1 and idx < close_body else data[:idx]
         with open(target_html, 'wb') as f:
             f.write(data)
         logging.info('✓ 复制原始的 hiperf_report.html: %s -> %s', source_html, target_html)
@@ -702,9 +699,16 @@ def update_load_excel_with_recovered_symbols(case_dir: str) -> bool:
                 cols = [str(c) for c in sheet_df.columns]
                 # 优先找地址/符号列（中英文），回退找函数名列
                 symbol_col = next(
-                    (c for c in cols if 'Symbol' in c or 'symbol' in c.lower()
-                     or '地址' in c or 'address' in c.lower()
-                     or '函数名' in c or 'function' in c.lower()),
+                    (
+                        c
+                        for c in cols
+                        if 'Symbol' in c
+                        or 'symbol' in c.lower()
+                        or '地址' in c
+                        or 'address' in c.lower()
+                        or '函数名' in c
+                        or 'function' in c.lower()
+                    ),
                     None,
                 )
                 if not symbol_col:
@@ -722,7 +726,9 @@ def update_load_excel_with_recovered_symbols(case_dir: str) -> bool:
                 if replaced_count > 0:
                     logging.info(
                         'Replaced %d symbols in sheet %s of %s',
-                        replaced_count, sheet_name, excel_path.name,
+                        replaced_count,
+                        sheet_name,
+                        excel_path.name,
                     )
                 else:
                     # 尝试匹配规范化后的地址
@@ -736,7 +742,9 @@ def update_load_excel_with_recovered_symbols(case_dir: str) -> bool:
                     if replaced_count > 0:
                         logging.info(
                             'Replaced %d symbols (normalized match) in sheet %s of %s',
-                            replaced_count, sheet_name, excel_path.name,
+                            replaced_count,
+                            sheet_name,
+                            excel_path.name,
                         )
 
             # 写回 Excel

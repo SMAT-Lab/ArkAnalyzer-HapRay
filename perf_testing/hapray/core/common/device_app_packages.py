@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable, Optional
 
+from hapray.analyze.llm_root_cause.index_builder import build_index
 from hapray.core.common.hap_decompiler_bridge import ensure_decompiler_env
 from hapray.core.common.root_cause_source import count_files_with_suffix, count_source_files
 
@@ -67,9 +69,7 @@ def resolve_decompiled_root(bundle_root: Path) -> Optional[Path]:
     ):
         return decompiled.resolve()
 
-    if _count_source_files(bundle_root) >= 3 or _count_files_with_suffix(
-        bundle_root, '.callgraph.json'
-    ) > 0:
+    if _count_source_files(bundle_root) >= 3 or _count_files_with_suffix(bundle_root, '.callgraph.json') > 0:
         return bundle_root.resolve()
 
     src_main = bundle_root / 'src' / 'main' / 'ets'
@@ -98,7 +98,9 @@ def detect_root_cause_input_kind(path: Path) -> str:
         cg_under = _count_files_with_suffix(decompiled, '.callgraph.json')
         if _has_symbol_index(decompiled / 'index') or src_under >= 3 or cg_under > 0:
             return ROOT_CAUSE_INPUT_SOURCE
-        if (decompiled / 'src' / 'main' / 'ets').is_dir() and _count_source_files(decompiled / 'src' / 'main' / 'ets') > 0:
+        if (decompiled / 'src' / 'main' / 'ets').is_dir() and _count_source_files(
+            decompiled / 'src' / 'main' / 'ets'
+        ) > 0:
             return ROOT_CAUSE_INPUT_SOURCE
         if (path / 'decompiled').is_dir():
             inner = path / 'decompiled'
@@ -277,10 +279,9 @@ def _materialize_user_app_packages(user_source: Path, dest_root: Path, bundle_na
         return looks_like_app_packages_root(dest_root)
 
     # 用户指向 .../.app_packages/<bundle>
-    if src.name == bundle_name and src.parent.name == DEFAULT_PACKAGES_DIRNAME:
-        if looks_like_app_packages_root(src):
-            shutil.copytree(src, dest_root, dirs_exist_ok=True)
-            return looks_like_app_packages_root(dest_root)
+    if src.name == bundle_name and src.parent.name == DEFAULT_PACKAGES_DIRNAME and looks_like_app_packages_root(src):
+        shutil.copytree(src, dest_root, dirs_exist_ok=True)
+        return looks_like_app_packages_root(dest_root)
 
     # 用户指向 .../.app_packages，取子目录
     if src.name == DEFAULT_PACKAGES_DIRNAME:
@@ -550,8 +551,6 @@ def _ensure_index_for_decompiled_tree(
 
     index_dir.mkdir(parents=True, exist_ok=True)
     try:
-        from hapray.analyze.llm_root_cause.index_builder import build_index
-
         build_index(decompiled_root, index_dir)
         logger.info('Built root-cause index from source tree at %s', index_dir)
     except Exception as e:
@@ -580,7 +579,7 @@ def _decompile_hap_packages(
         logger.warning(
             'HAP package(s) under %s but %s is unset; skipping HAP decompile. '
             'Root-cause will run in analyze mode, or provide a decompiled source tree via --app-packages-dir. '
-            'Set e.g. HAPRAY_HAP_DECOMPILER_CMD=\'python /path/to/decompiler.py --input {hap} --output {output}\'',
+            "Set e.g. HAPRAY_HAP_DECOMPILER_CMD='python /path/to/decompiler.py --input {hap} --output {output}'",
             bundle_pkg_dir,
             ENV_HAP_DECOMPILER_CMD,
         )
@@ -687,10 +686,8 @@ def _update_manifest_decompile_paths(bundle_pkg_dir: Path, decompiled: Path, ind
     data['input_kind'] = ROOT_CAUSE_INPUT_SOURCE
     data['decompiled_dir'] = str(decompiled)
     data['index_dir'] = str(index_dir)
-    try:
+    with contextlib.suppress(OSError):
         manifest_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-    except OSError:
-        pass
 
 
 def resolve_root_cause_artifacts(report_dir: str, bundle_name: str) -> tuple[Optional[str], Optional[str]]:
@@ -724,7 +721,6 @@ def resolve_root_cause_artifacts(report_dir: str, bundle_name: str) -> tuple[Opt
 def root_cause_llm_mode_for_bundle(report_dir: str, bundle_name: str) -> str:
     """``with_source``：有反编译/源码树；``analyze``：仅 HAP 或无代码片段。"""
     _index, decompiled = resolve_root_cause_artifacts(report_dir, bundle_name)
-    if decompiled and Path(decompiled).is_dir():
-        if _index or _count_source_files(Path(decompiled)) > 0:
-            return 'with_source'
+    if decompiled and Path(decompiled).is_dir() and (_index or _count_source_files(Path(decompiled)) > 0):
+        return 'with_source'
     return 'analyze'

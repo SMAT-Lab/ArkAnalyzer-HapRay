@@ -34,7 +34,7 @@ DEFAULT_PERF_DATA = 'perf.data'
 DEFAULT_PERF_DB = 'perf.db'
 DEFAULT_TOP_N = 100
 DEFAULT_BATCH_SIZE = 3
-DEFAULT_REQUEST_DELAY = 0.5   # 请求间隔（秒）
+DEFAULT_REQUEST_DELAY = 0.5  # 请求间隔（秒）
 DEFAULT_LLM_MODEL = 'GPT-5'
 DEFAULT_LLM_TIMEOUT = 30
 DEFAULT_CACHE_DIR = 'cache'
@@ -67,10 +67,10 @@ ENV_KEY_LLM_BASE_URL = 'LLM_BASE_URL'
 ENV_KEY_LLM_MODEL = 'LLM_MODEL'
 ENV_KEY_LLM_TIMEOUT = 'LLM_TIMEOUT'
 ENV_KEY_LLM_CACHE_DIR = 'LLM_CACHE_DIR'
-ENV_KEY_LLM_BATCH_SIZE = 'LLM_BATCH_SIZE'           # 可手动覆盖服务默认值
-ENV_KEY_LLM_REQUEST_DELAY = 'LLM_REQUEST_DELAY'    # 可手动覆盖服务默认值
+ENV_KEY_LLM_BATCH_SIZE = 'LLM_BATCH_SIZE'  # 可手动覆盖服务默认值
+ENV_KEY_LLM_REQUEST_DELAY = 'LLM_REQUEST_DELAY'  # 可手动覆盖服务默认值
 ENV_KEY_LLM_MAX_CONCURRENT = 'LLM_MAX_CONCURRENT'  # 并发批次数，1 = 串行
-ENV_KEY_LLM_TRUST_ENV = 'LLM_TRUST_ENV'            # 是否信任系统代理环境变量（httpx trust_env）
+ENV_KEY_LLM_TRUST_ENV = 'LLM_TRUST_ENV'  # 是否信任系统代理环境变量（httpx trust_env）
 
 # 服务类型 → API Key 环境变量名映射
 _LLM_SERVICE_TYPE = os.getenv('LLM_SERVICE_TYPE', '').lower()
@@ -99,10 +99,10 @@ _LLM_MODEL_ENV_MAP: dict[str, str] = {
 #   delay=0.1s（并发模式下批次间不强制等待，只在遇到 429 时 retry）
 #   max_concurrent=5（5 个批次同时发出，约 30s → 6s，提速 ~5x）
 _LLM_SERVICE_PERF_PARAMS: dict[str, tuple[int, float, int]] = {
-    'claude':   (10,  0.1, 5),   # Anthropic API，Tier 4 高限额，启用 5 并发
-    'openai':   (5,   0.2, 1),   # OpenAI，串行保守
-    'deepseek': (3,   0.3, 1),   # DeepSeek，串行保守
-    'poe':      (3,   0.3, 1),   # Poe，串行保守
+    'claude': (10, 0.1, 5),  # Anthropic API，Tier 4 高限额，启用 5 并发
+    'openai': (5, 0.2, 1),  # OpenAI，串行保守
+    'deepseek': (3, 0.3, 1),  # DeepSeek，串行保守
+    'poe': (3, 0.3, 1),  # Poe，串行保守
 }
 
 

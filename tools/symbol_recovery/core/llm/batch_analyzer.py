@@ -336,8 +336,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
         if self.max_concurrent > 1:
             return self._run_concurrent(batches, total_batches, context)
-        else:
-            return self._run_serial(batches, total_batches, context)
+        return self._run_serial(batches, total_batches, context)
 
     # ------------------------------------------------------------------
     # 串行执行
@@ -485,9 +484,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 if self.save_prompts:
                     try:
                         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
-                        response_file = (
-                            self.prompt_output_dir / f'llm_response_batch_{batch_num:03d}_{timestamp}.txt'
-                        )
+                        response_file = self.prompt_output_dir / f'llm_response_batch_{batch_num:03d}_{timestamp}.txt'
                         with open(response_file, 'w', encoding='utf-8') as f:
                             f.write('=' * 80 + '\n')
                             f.write(f'LLM 响应 (批次 {batch_num}/{total_batches})\n')
@@ -573,11 +570,14 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 err_str = str(e)
                 is_rate_limit = '429' in err_str or 'rate_limit' in err_str.lower() or 'rate limit' in err_str.lower()
                 if is_rate_limit and attempt < max_retries - 1:
-                    logger.warning(f'⚠️  Rate limit (429), retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})')
+                    logger.warning(
+                        f'⚠️  Rate limit (429), retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})'
+                    )
                     _time.sleep(delay)
                     delay *= 2
                 else:
                     raise
+        return None
 
     def _parse_batch_response(self, response_text: str, functions_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """

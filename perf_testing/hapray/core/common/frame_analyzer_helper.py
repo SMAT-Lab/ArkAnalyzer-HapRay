@@ -179,9 +179,7 @@ def update_empty_frame_results():
         # 遍历目录
         for root, dirs, _ in os.walk(root_dir):
             # 过滤出符合条件的目录
-            target_dirs = [
-                d for d in dirs if d.startswith('PerfLoad_') and 'round' not in d.lower()
-            ]
+            target_dirs = [d for d in dirs if d.startswith('PerfLoad_') and 'round' not in d.lower()]
 
             for target_dir in target_dirs:
                 report_dir = os.path.join(root, target_dir)

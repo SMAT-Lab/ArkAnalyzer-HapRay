@@ -1,4 +1,5 @@
 """Shared string helpers for root-cause evidence (avoid None in joins/format)."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -220,9 +220,7 @@ def enrich_gui_agent_contract_outputs(reports_path: str) -> dict[str, Any]:
                     try:
                         with open(sj, encoding='utf-8') as f:
                             data = json.load(f)
-                        if isinstance(data, list):
-                            row['step_count'] = len(data)
-                        elif isinstance(data, dict):
+                        if isinstance(data, (list, dict)):
                             row['step_count'] = len(data)
                         else:
                             row['step_count'] = None
