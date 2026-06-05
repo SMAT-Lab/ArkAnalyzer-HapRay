@@ -41,7 +41,9 @@ from .llm_client import is_llm_configured, load_client_from_config
 from .proc_source_match import pick_aligned_candidates, source_path_aligned
 from .prompts import build_user_prompt, get_system_prompt
 from .report_renderer import EvidenceReportRenderer
+from .signal_extractors import OBSERVATION_EXTRACTORS, SUSPECT_EXTRACTORS
 from .structured_output import (
+    CATEGORY_LABELS,
     OUTPUT_SCHEMA_STR,
     parse_llm_output,
     render_fallback_markdown,
@@ -281,20 +283,21 @@ def _run_analyze_with_llm(
     structured_evidence: dict,
     stream: bool,
     code_snippets: list[dict[str, Any]] | None = None,
+    checker: str = 'empty-frame',
 ) -> str | None:
     """
     analyze mode: LLM receives raw evidence (+ optional source snippets) and reasons independently.
     Returns the rendered Markdown report, or None on failure.
     """
-    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker='empty-frame', context_signals=[])
+    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker=checker, context_signals=[])
     system_prompt = get_system_prompt(
         language=language,
-        checker='empty-frame',
+        checker=checker,
         mode='analyze',
         domain_knowledge=domain_knowledge,
     )
     user_prompt = build_user_prompt(
-        checker='empty-frame',
+        checker=checker,
         context_text=context_text,
         structured_evidence=structured_evidence,
         code_snippets=code_snippets or [],
@@ -338,16 +341,17 @@ def _build_agent_prompts(
     mode: str,
     code_snippets: list[dict[str, Any]],
     call_chains_text: str,
+    checker: str = 'empty-frame',
 ) -> tuple[str, str]:
-    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker='empty-frame', context_signals=[])
+    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker=checker, context_signals=[])
     system_prompt = get_system_prompt(
         language=language,
-        checker='empty-frame',
+        checker=checker,
         mode=mode,
         domain_knowledge=domain_knowledge,
     )
     user_prompt = build_user_prompt(
-        checker='empty-frame',
+        checker=checker,
         context_text=context_text,
         structured_evidence=structured_evidence,
         code_snippets=code_snippets,
@@ -363,11 +367,12 @@ def _write_agent_task(
     mode: str,
     system_prompt: str,
     user_prompt: str,
+    checker: str = 'empty-frame',
 ) -> Path:
     task_path = output_path.parent / f'{output_path.stem}_agent_task.json'
     task = {
         'task_type': 'hapray_root_cause',
-        'checker': 'empty-frame',
+        'checker': checker,
         'mode': mode,
         'language': language,
         'instructions': [
@@ -524,6 +529,7 @@ def _run_agent_fallback(
     call_chains_text: str,
     evidence_report: str,
     llm_config: dict | None = None,
+    checker: str = 'empty-frame',
 ) -> str:
     system_prompt, user_prompt = _build_agent_prompts(
         language=language,
@@ -532,8 +538,9 @@ def _run_agent_fallback(
         mode=mode,
         code_snippets=code_snippets,
         call_chains_text=call_chains_text,
+        checker=checker,
     )
-    task_path = _write_agent_task(output_path, language, mode, system_prompt, user_prompt)
+    task_path = _write_agent_task(output_path, language, mode, system_prompt, user_prompt, checker=checker)
     result_path = output_path.parent / f'{output_path.stem}_agent_result.json'
     cfg = llm_config or {}
 
@@ -647,6 +654,7 @@ def _run_with_source_llm(
     call_chains_text: str,
     evidence_report: str,
     stream: bool,
+    checker: str = 'empty-frame',
 ) -> str | None:
     """
     with_source mode: LLM reads source code snippets and produces line-level fix recommendations.
@@ -656,9 +664,9 @@ def _run_with_source_llm(
     # Fall back to pure analyze only when there are neither code snippets nor
     # any meaningful /proc evidence hints to reason from.
     proc_hints = structured_evidence.get('proc_source_hints', [])
-    if not code_snippets and not proc_hints:
+    if not code_snippets and not proc_hints and not structured_evidence.get('sections'):
         logging.info('No code snippets or evidence; falling back to analyze mode.')
-        return _run_analyze_with_llm(config, language, context_text, structured_evidence, stream)
+        return _run_analyze_with_llm(config, language, context_text, structured_evidence, stream, checker=checker)
 
     if not code_snippets:
         logging.info(
@@ -666,15 +674,15 @@ def _run_with_source_llm(
             len(proc_hints),
         )
 
-    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker='empty-frame', context_signals=[])
+    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker=checker, context_signals=[])
     system_prompt = get_system_prompt(
         language=language,
-        checker='empty-frame',
+        checker=checker,
         mode='with_source',
         domain_knowledge=domain_knowledge,
     )
     user_prompt = build_user_prompt(
-        checker='empty-frame',
+        checker=checker,
         context_text=context_text,
         structured_evidence=structured_evidence,
         code_snippets=code_snippets,
@@ -897,6 +905,260 @@ def run_empty_frame_analysis(
     output.write_text(final_report, encoding='utf-8')
 
     logging.info('Root cause analysis complete: %s', output_path)
+    return final_report
+
+
+def _collect_comprehensive_snippets(
+    sections: dict[str, Any],
+    source_root: Path,
+    *,
+    max_snippets: int = 24,
+) -> list[dict[str, Any]]:
+    """从所有 section 的 items 中，对带 source_path+line 的条目抽取源码片段。"""
+    extractor = CodeSnippetExtractor(source_root)
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for sec in sections.values():
+        for item in sec.get('items', []) or []:
+            if not isinstance(item, dict):
+                continue
+            sp = item.get('source_path')
+            line = item.get('line') or item.get('line_start')
+            if not sp or not line:
+                continue
+            try:
+                line_i = int(line)
+            except (TypeError, ValueError):
+                continue
+            key = (sp, line_i)
+            if key in seen:
+                continue
+            seen.add(key)
+            snippet = extractor.extract(sp, max(1, line_i - 3), line_i + 8, annotate=True)
+            if not snippet:
+                continue
+            out.append(
+                {
+                    'file': sp,
+                    'line_start': line_i,
+                    'line_end': line_i,
+                    'owner_name': item.get('owner_name', ''),
+                    'symbol_name': item.get('symbol_name', ''),
+                    'code_snippet': snippet,
+                    'category': sec.get('category', ''),
+                }
+            )
+            if len(out) >= max_snippets:
+                return out
+    return out
+
+
+def _render_comprehensive_evidence(
+    sections: dict[str, Any],
+    context_text: str,
+    code_snippets: list[dict[str, Any]],
+) -> str:
+    """渲染多信号证据报告（debug 产物，也是 --skip-llm 时的最终输出）。"""
+    lines: list[str] = ['# Root Cause Evidence (Comprehensive · multi-signal)', '']
+    lines.append('## 性能摘要')
+    lines.append(context_text)
+    lines.append('')
+    for cat, sec in sections.items():
+        label = CATEGORY_LABELS.get(cat, cat)
+        kind = sec.get('kind', '')
+        lines.append(f'## [{kind}] {label}  ({cat})')
+        summary = sec.get('summary') or {}
+        if summary:
+            lines.append('```json')
+            lines.append(json.dumps(summary, ensure_ascii=False, indent=2))
+            lines.append('```')
+        items = sec.get('items') or []
+        if items:
+            lines.append(f'- 明细条目数: {len(items)}')
+            lines.append('```json')
+            lines.append(json.dumps(items[:15], ensure_ascii=False, indent=2))
+            lines.append('```')
+        lines.append('')
+    if code_snippets:
+        lines.append('## 关联源码片段')
+        lines.append('')
+        for c in code_snippets:
+            lines.append(
+                f"### {c.get('owner_name', '')}.{c.get('symbol_name', '')} "
+                f"({c.get('file', '')}:{c.get('line_start', 0)})  [{c.get('category', '')}]"
+            )
+            lines.append('```typescript')
+            lines.append((c.get('code_snippet') or '').rstrip())
+            lines.append('```')
+            lines.append('')
+    return '\n'.join(lines).strip() + '\n'
+
+
+def run_comprehensive_analysis(
+    report_dir: str,
+    output_path: str,
+    llm_config: dict,
+    index_dir: str | None = None,
+    source_dir: str | None = None,
+    llm_mode: str = 'analyze',
+    stream: bool = False,
+    skip_llm: bool = False,
+    enabled_categories: list[str] | None = None,
+) -> str:
+    """多信号全面根因分析（不限空刷）。
+
+    聚合 CPU 高负载、帧负载、组件复用、线程、IPC、SO 负载、内存（suspect）
+    与帧率/UI/故障树（observation）等信号，按 category 分章喂给 LLM/Agent。
+    空刷为可选信号：无 trace_emptyFrame.json 也能跑。
+    """
+    cfg = llm_config or {}
+    analysis_cfg = cfg.get('analysis', {}) if isinstance(cfg, dict) else {}
+    language = analysis_cfg.get('language', 'zh')
+    top_n = analysis_cfg.get('top_n_hotspots', 10)
+
+    def enabled(cat: str) -> bool:
+        return enabled_categories is None or cat in enabled_categories
+
+    # 1. 性能上下文摘要
+    builder = ContextBuilder(report_dir, top_n=top_n)
+    ctx = builder.build()
+    context_text = builder.to_prompt_text(ctx)
+
+    sections: dict[str, Any] = {}
+
+    # 2. 空刷（可选，不再硬依赖）
+    if enabled('empty-frame'):
+        try:
+            ef = EmptyFrameEvidenceExtractor(report_dir, top_n=min(top_n, 5)).build()
+            proc_hints = ef.get('proc_source_hints', [])
+            if index_dir:
+                proc_hints = CodeIndexLookup(index_dir).lookup_proc_sources(proc_hints)
+            sections['empty-frame'] = {
+                'category': 'empty-frame',
+                'kind': 'suspect',
+                'summary': ef.get('overview', {}),
+                'items': proc_hints,
+                'dominant_threads': ef.get('dominant_threads', []),
+                'representative_frames': (ef.get('representative_frames', []) or [])[:3],
+                'caveats': ef.get('caveats', []),
+            }
+        except FileNotFoundError:
+            logging.info('Comprehensive: 无 trace_emptyFrame.json，空刷章跳过（非必需）。')
+        except Exception as exc:
+            logging.warning('Empty-frame section failed: %s', exc)
+
+    # 3. 其余信号 extractor
+    for cls in [*SUSPECT_EXTRACTORS, *OBSERVATION_EXTRACTORS]:
+        if not enabled(cls.category):
+            continue
+        try:
+            ext = cls(report_dir, top_n=top_n)
+            if not ext.is_available():
+                continue
+            sec = ext.build()
+        except Exception as exc:
+            logging.warning('Extractor %s failed: %s', cls.__name__, exc)
+            continue
+        if sec:
+            sections[cls.category] = sec
+
+    if not sections:
+        msg = (
+            '# Root Cause Analysis\n\n'
+            '未发现可用的性能信号产物（report/ 下缺少 trace_*.json / perf.db / so_file_load.json 等）。\n'
+        )
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(msg, encoding='utf-8')
+        return msg
+
+    logging.info('Comprehensive root-cause signals: %s', ', '.join(sections.keys()))
+
+    # 4. 源码片段（with_source）
+    code_snippets: list[dict[str, Any]] = []
+    if source_dir and Path(source_dir).exists():
+        code_snippets = _collect_comprehensive_snippets(sections, Path(source_dir))
+
+    structured_evidence = {'mode': 'comprehensive', 'sections': sections}
+    evidence_report = _render_comprehensive_evidence(sections, context_text, code_snippets)
+
+    # 5. Agent / LLM 分析
+    final_report: str | None = None
+    if not skip_llm:
+        execution_mode = _root_cause_execution_mode(cfg)
+        effective_mode = 'with_source' if (source_dir and code_snippets) else 'analyze'
+        if execution_mode == 'agent':
+            logging.info('Comprehensive root-cause execution mode: agent orchestration')
+            final_report = _run_agent_fallback(
+                output_path=Path(output_path),
+                language=language,
+                context_text=context_text,
+                structured_evidence=structured_evidence,
+                mode=effective_mode,
+                code_snippets=code_snippets,
+                call_chains_text='',
+                evidence_report=evidence_report,
+                llm_config=cfg,
+                checker='comprehensive',
+            )
+        elif is_llm_configured(cfg):
+            if effective_mode == 'with_source':
+                final_report = _run_with_source_llm(
+                    config=cfg,
+                    language=language,
+                    context_text=context_text,
+                    structured_evidence=structured_evidence,
+                    code_snippets=code_snippets,
+                    call_chains_text='',
+                    evidence_report=evidence_report,
+                    stream=stream,
+                    checker='comprehensive',
+                )
+            else:
+                final_report = _run_analyze_with_llm(
+                    config=cfg,
+                    language=language,
+                    context_text=context_text,
+                    structured_evidence=structured_evidence,
+                    stream=stream,
+                    code_snippets=code_snippets or None,
+                    checker='comprehensive',
+                )
+            if execution_mode == 'auto' and final_report is None:
+                final_report = _run_agent_fallback(
+                    output_path=Path(output_path),
+                    language=language,
+                    context_text=context_text,
+                    structured_evidence=structured_evidence,
+                    mode=effective_mode,
+                    code_snippets=code_snippets,
+                    call_chains_text='',
+                    evidence_report=evidence_report,
+                    llm_config=cfg,
+                    checker='comprehensive',
+                )
+        else:
+            final_report = _run_agent_fallback(
+                output_path=Path(output_path),
+                language=language,
+                context_text=context_text,
+                structured_evidence=structured_evidence,
+                mode=effective_mode,
+                code_snippets=code_snippets,
+                call_chains_text='',
+                evidence_report=evidence_report,
+                llm_config=cfg,
+                checker='comprehensive',
+            )
+
+    if final_report is None:
+        final_report = evidence_report  # --skip-llm 或 API 失败
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    (output.parent / (output.stem + '_evidence.md')).write_text(evidence_report, encoding='utf-8')
+    output.write_text(final_report, encoding='utf-8')
+    logging.info('Comprehensive root cause analysis complete: %s', output_path)
     return final_report
 
 

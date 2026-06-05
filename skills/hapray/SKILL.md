@@ -4,7 +4,7 @@ version: "1.5.5"
 description: |
   Guides OpenHarmony/HarmonyOS HapRay performance analysis in six stages:
   setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
-  Symbol recovery (update) is an OPTIONAL branch, only when explicitly requested or hotspots are stripped.
+  Symbol recovery (update) is triggered when user explicitly requests it or when hotspots are stripped; skipped otherwise.
   Use when the user mentions HapRay, 鸿蒙性能, perf testing, 高负载分析, symbol recovery, or root-cause.
   触发词含：鸿蒙性能、高负载分析、空刷根因、符号恢复。
   Hard gates: no shell until path_prompt_done; then Read this SKILL plus the current stage doc before CLI.
@@ -16,14 +16,14 @@ description: |
 
 ## 六阶段流水线
 
-> **核心变更（v1.6，阶段骨架不变，仅改语义）**：`perf` 已产出 `report/` 下全部分析器数据（`summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json`、`hapray_report.*`）。**阶段 3 `gen-perf-report`（`update` 符号恢复）从「必跑」降为「按需」**：未提符号恢复时**跳过阶段 3**，直接进入阶段 4 读 `report/` 做高负载分析。**阶段 5 root-cause 脱离 `update`**（独立 CLI + Agent），且**不限空刷**。
+> **核心变更（v1.6，阶段骨架不变，仅改语义）**：`perf` 已产出 `report/` 下全部分析器数据（`summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json`、`hapray_report.*`）。**阶段 3 `gen-perf-report`（`update` 符号恢复）从「必跑」降为「按需」**：用户明确要求符号恢复、或需要符号级热点/火焰图 stripped 时执行，否则**跳过阶段 3**，直接进入阶段 4 读 `report/` 做高负载分析。**阶段 5 root-cause 脱离 `update`**（独立 CLI + Agent），且**不限空刷**。
 
 | 阶段 | 目录 / 文件 | CLI | 产出 |
 |:--:|-------------|-----|------|
 | **0** | 本节 §0 | — | 路径门禁 |
 | **1 setup** | `workflow/setup-binary.md` / `setup-source.md` | build / 下载 | 环境就绪 |
 | **2 collect** | `workflow/perf-collect.md` | `perf` / `prepare` | `reports/<ts>/<用例>/report/` 全套分析器产物 |
-| **3 gen-perf-report（可选）** | `workflow/gen-perf-report.md` | **`update --so_dir`** | **仅按需符号恢复**：增强火焰图、符号级热点（未提符号恢复则**跳过**） |
+| **3 gen-perf-report（可选）** | `workflow/gen-perf-report.md` | **`update --so_dir`** | **符号恢复**：用户明确要求，或需要符号级热点/火焰图 stripped 时执行；否则**跳过** |
 | **4 analysis** | `analysis/README.md` → 子 Skill | **读 `report/` / SQL** | SO/符号/帧/线程/IPC/内存高负载热点、动静交叉、新发现 |
 | **5 root-cause** | `root-cause/empty-frame.md` | **独立 `root-cause`** + Agent | `root_cause.md`（空刷）+ Agent 全面根因（不限空刷） |
 | **6 deliver** | `report/analysis-deliverable.md` | — | `reports/hapray-analysis-*.md`（高负载分析报告，融合根因） |
@@ -126,9 +126,12 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 ### 必问模板（第 2 项）
 
 ```text
-**第 2/2 项：SO 路径（仅符号恢复时需要，可跳过）**
+**第 2/2 项：SO 路径（符号恢复时用，可跳过/从设备拉取）**
 接受含应用 *.so 的目录，例：<path>/libs/arm64/
-说明：默认流程不跑符号恢复；仅当你要符号级热点、或火焰图热点为 libxxx.so+0x.. 时才需要
+说明：
+- 若用户明确要求符号恢复，必须执行
+- 提供路径则直接使用；跳过则尝试从设备拉取
+- 拉取失败则标注「符号恢复失败，从设备拉取so文件失败，需要提供so路径才能进行符号恢复」
 → 回复具体路径，或回复「跳过」
 
 汇总确认：
@@ -144,8 +147,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 |----------|------|
 | 源码路径 | `app_packages_dir_user` → 阶段 5 root-cause `--source-dir` / `--app-packages-dir` |
 | 「跳过」源码 | root-cause 降级为 analyze（仅证据，无源码级行号）或仅做 perf 产物级根因 |
-| SO 路径 | `so_dir_user` → 可选符号恢复 `update --so_dir` |
-| 「跳过」SO | 不做符号恢复（默认）；符号级热点若为 stripped 地址则标注「建议符号恢复」 |
+| SO 路径 | `so_dir_user` → 符号恢复 `update --so_dir` |
+| 「跳过」SO | 用户明确要求符号恢复时：尝试从设备拉取；拉取失败则标注「符号恢复失败，从设备拉取so文件失败，需要提供so路径才能进行符号恢复」。未要求时：跳过符号恢复 |
 | 仅「继续/跑吧」未给路径 | **不算**答复，重发模板 |
 
 **禁止**：路径未齐就 Shell；未 Read 阶段文档就 Shell；同条消息问路径又 Shell。
