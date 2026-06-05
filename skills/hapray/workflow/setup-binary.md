@@ -147,10 +147,12 @@ Set-Location <RUNTIME_ROOT>
 | 主 CLI 可运行 | `<RUNTIME_ROOT>` 下 `./hapray --help` 或 `perf-testing.exe --help`（Windows 用 `.\perf-testing.exe --help`） |
 | 报告模板 / 资源 | 缺 `report_template.html` / `hiperf_report_template.html` 等 → **换完整 release 包**或按发布说明补 `resource/`，**不是**自动套用源码轨「cd web && npm run build」（除非当前工作区实为 `<REPO_ROOT>`） |
 | trace_streamer / sa-cmd | 缺则换包或从官方制品补 `dist/tools/bin/`、`dist/tools/sa-cmd/` |
-| **符号恢复可发现** | `update` 会启动符号恢复子进程；**分体包**（`perf-testing` 与 `symbol-recovery` 分开发行）时**必须**满足其一：① 解压到**同一安装树根**下，使从主程序 exe 目录**向上**能搜到 `symbol-recovery(.exe)` 或 `symbol_recovery/`、`tools/symbol_recovery/` 等约定路径；② 或设置 **`HAPRAY_SYMBOL_RECOVERY_ROOT`**（指向含 `symbol-recovery` 可执行文件或 `main.py` 的目录）、**`HAPRAY_SYMBOL_RECOVERY_EXE`**（直接指向可执行文件）、必要时 **`HAPRAY_SYMBOL_RECOVERY_PYTHON`** |
+| **符号恢复可发现（仅做符号恢复时需要）** | **可选阶段3** `update --so_dir` 会启动符号恢复子进程；**仅当**你要符号级热点时才需满足以下其一。默认高负载分析（读 `report/`）**不依赖**符号恢复。**分体包**（`perf-testing` 与 `symbol-recovery` 分开发行）时**必须**满足其一：① 解压到**同一安装树根**下，使从主程序 exe 目录**向上**能搜到 `symbol-recovery(.exe)` 或 `symbol_recovery/`、`tools/symbol_recovery/` 等约定路径；② 或设置 **`HAPRAY_SYMBOL_RECOVERY_ROOT`**（指向含 `symbol-recovery` 可执行文件或 `main.py` 的目录）、**`HAPRAY_SYMBOL_RECOVERY_EXE`**（直接指向可执行文件）、必要时 **`HAPRAY_SYMBOL_RECOVERY_PYTHON`** |
 | LLM / Agent | 与源码轨相同：配置 `LLM_API_KEY`+`LLM_BASE_URL` 等；LLM 失败走 Agent 闭环（见 [gen-perf-report.md §3.5](gen-perf-report.md)） |
 
-### update / 符号恢复在二进制下的注意点
+### update / 符号恢复在二进制下的注意点（仅可选阶段3）
+
+> 仅当执行可选符号恢复（`update --so_dir`）时相关；默认流程读 `report/` 做高负载分析，不涉及本节。
 
 - **Excel → perf.json 写回**：若安装目录中**无可 import 的** `tools/symbol_recovery/core/` 源码树，引擎会**自动**再调一次 `symbol-recovery` 子进程执行 `--apply-excel-to-perf-json`（无需人工拆分命令）。  
 - **Agent Step2**（`--step2-openai` / `--step2-split` / `--step2-merge`）：应通过 **`symbol-recovery` 可执行文件或 `main.py` 子进程**完成；不要假设能在 `perf-testing` 进程内 `import` 符号恢复 one-file 包内嵌代码。

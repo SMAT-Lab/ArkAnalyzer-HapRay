@@ -1,14 +1,60 @@
-# 空刷根因分析（阶段 5）
+# 全面根因分析（阶段 5，独立 · 脱离 update）
 
-适用场景：HapRay 检测到**空刷（empty frame）** 问题后，使用 `hapray root-cause` 或 **`update` 集成路径** 做根因定位与代码级修复建议。实现位于 `perf_testing/hapray/analyze/llm_root_cause/`，与 `hapray update` 共用 **Agent 优先** 编排（与符号恢复一致）。
+适用场景：阶段4 high-load 完成后，对**所有**已挖出的高负载问题做**源码级根因定位**——**不限空刷**。本阶段**脱离 `update`**：空刷走**独立 `root-cause` CLI**（`run_empty_frame_analysis`，实现于 `perf_testing/hapray/analyze/llm_root_cause/`）；其余高负载问题（SO/符号热点、高负载帧、冗余线程、IPC、内存等）由 **Agent** 结合阶段4发现 + 源码逐类定位。两者融合进阶段6报告。
 
-> **阶段 3 符号恢复**：SO 路径与验收见 [`workflow/gen-perf-report.md`](../workflow/gen-perf-report.md)。**阶段 5 空刷 root-cause 权威来源为本文件**。
+> **阶段3 符号恢复**：SO 路径与符号级热点见 [`../workflow/gen-perf-report.md`](../workflow/gen-perf-report.md)（可选）。**本阶段为全面 root-cause 权威来源**。
 
-> **Agent 必读**：若产出 `root_cause_agent_task.json` 且报告含 “Pending Agent Inference”，当前对话 Agent **必须**读取任务 JSON、按 `expected_schema_json` 写 `root_cause_agent_result.json`，再重跑 `update` 或 `root-cause`，禁止只读 tasks 就结束。
+> **Agent 必读**：若空刷 CLI 产出 `root_cause_agent_task.json` 且报告含 "Pending Agent Inference"，当前对话 Agent **必须**读取任务 JSON、按 `expected_schema_json` 写 `root_cause_agent_result.json`，再重跑 `root-cause`，禁止只读 tasks 就结束。
 
 ---
 
-## 〇、与 `update` 集成（推荐路径）
+## 〇、两条腿：空刷 CLI + Agent 全面根因
+
+| 腿 | 覆盖 | 驱动 | 产出 |
+|----|------|------|------|
+| **A 空刷专项** | empty frame（空刷帧） | 独立 `root-cause` CLI（默认 Agent 编排） | `root_cause.md` / `root_cause_evidence.md` |
+| **B 全面根因** | SO/符号热点、高负载帧、冗余线程、IPC、内存、组件复用等**非空刷**问题 | **当前 Agent**（读阶段4发现 + 源码 + perf 产物） | 直接写入阶段6报告的「根因分析」章节 |
+
+**A 与 B 合并**：A 的 Top Suspects 作为空刷类根因；B 覆盖其余高负载维度。二者按 P0/P1/P2/P3 统一排序，融合进 [`../report/analysis-deliverable.md`](../report/analysis-deliverable.md) 第三章三段式（HapRay 证据 + 源码根因 + 修复建议）。
+
+### 〇.0 独立 CLI 用法（A 空刷专项，脱离 update）
+
+```bash
+cd perf_testing
+# with_source（推荐，需 §0 源码路径）：LLM/Agent 读源码给行级修复
+uv run python -m scripts.main root-cause \
+  --report-dir <用例>/report \
+  --source-dir "<§0_源码>" \
+  [--index-dir "<§0_源码>/index"]
+
+# 仅证据（不调 LLM）：root_cause.md == root_cause_evidence.md
+uv run python -m scripts.main root-cause --report-dir <用例>/report --skip-llm
+```
+
+- `--report-dir` **须指向含 `trace_emptyFrame.json` 的目录**（一般为 `<用例>/report`）。
+- 默认 **Agent 编排**（导出 `root_cause_agent_task.json` → Agent 写 `root_cause_agent_result.json` → 重跑）。本地直连 API 需 `HAPRAY_ROOT_CAUSE_EXECUTION=api` + `LLM_*`（兼容路径，非默认）。
+- **无需 `update`**：本命令独立运行，仅消费 perf 已产出的 `report/`。
+
+### 〇.0.1 B 全面根因：Agent 逐类定位（不限空刷）
+
+对阶段4 high-load 输出的每一类热点，Agent 借 §0 源码做源码级定位，作为独立根因条目：
+
+| 高负载维度（来自阶段4） | 根因定位方式 |
+|------------------------|--------------|
+| SO / 符号级热点（`perf_sample` Top） | 热点符号 → 源码函数/调用链；第三方库则定位调用点与频次 |
+| 高负载帧（`frame_slice` / `trace_frames`） | 帧时间窗内的触发组件/回调 → 源码 `build()` / 生命周期 |
+| 冗余线程（`redundant_thread_analysis.json`） | 线程名 → 源码线程池/Worker 创建点 |
+| IPC Binder（`trace_ipc_binder.json`） | 高频事务调用方 → 源码 IPC 调用点 |
+| 内存（`memory_report.xlsx`） | 超额分配 → 源码分配热点 |
+| 组件复用（`trace_componentReuse.json`） | 低复用率组件 → 源码 LazyForEach/复用配置 |
+
+**禁止**：无源码依据的臆造行号；把阶段4未挖出的问题硬写成根因；只复述空刷 CLI 而不覆盖其余维度。
+
+---
+
+## 一、与 `update` 集成（旧路径，可选）
+
+> 以下为 `update` **集成调用** root-cause 的旧行为，**非默认**。默认走 §〇.0 独立 CLI。若用户已在跑符号恢复 `update` 且同时要空刷根因，可启用本路径（`update` 内部调用 `run_root_cause_for_case`）。
 
 `perf` → **`update`** 时（`update_action.py` + `root_cause_integration.py`），存在 `trace_emptyFrame.json` 时**默认**尝试 root-cause。
 
@@ -63,8 +109,8 @@ uv run python -m scripts.main update \
 | `root_cause.md` | 存在，且非 “Pending Agent Inference” 占位 |
 | 输入材料（with_source） | 用户源码路径或 `.app_packages/<包名>/source-analysis/index/symbol_index.jsonl` |
 | 总报告 | `hapray_report.html` 含 `hapray-root-cause-panel` 或 JSON 含 `more.root_cause` |
-| Agent 任务 | 若存在 `root_cause_agent_task.json` → 写 `root_cause_agent_result.json` → 重跑 `update` 或 `root-cause` |
-| 阶段 6 交付 | `root_cause.md` 验收通过后，Agent **MUST Read 并全文内嵌**至 [`report/analysis-deliverable.md`](../report/analysis-deliverable.md) §空刷根因章节 |
+| Agent 任务 | 若存在 `root_cause_agent_task.json` → 写 `root_cause_agent_result.json` → 重跑独立 `root-cause`（或集成 `update`） |
+| 阶段 6 交付 | `root_cause.md` 验收通过后，Agent **MUST Read** 并将空刷 Top Suspects **融合**进 [`report/analysis-deliverable.md`](../report/analysis-deliverable.md) 第三章（与 B 全面根因统一排序，非机械全文复制） |
 
 ---
 

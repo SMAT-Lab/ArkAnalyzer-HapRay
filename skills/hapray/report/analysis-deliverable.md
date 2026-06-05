@@ -1,9 +1,9 @@
 > 主 Skill 路由：[`SKILL.md`](../SKILL.md) 阶段 6  
-> 前置：阶段 3 [`gen-perf-report`](../workflow/gen-perf-report.md) 产出工具报告；阶段 4 [`analysis/`](../analysis/README.md) 线索；阶段 5 [`root-cause/empty-frame`](../root-cause/empty-frame.md) 的 `root_cause.md`（若有空刷）。
+> 前置：阶段 4 [`analysis/`](../analysis/README.md) high-load 线索（读 `report/`，**不依赖 update**）；阶段 5 [`root-cause/empty-frame`](../root-cause/empty-frame.md) 的空刷 `root_cause.md`（A）+ Agent 全面根因（B）。可选阶段 3 符号恢复产物（如有）。
 
-# Agent 分析交付报告（analysis-deliverable）
+# Agent 分析交付报告（高负载分析报告，analysis-deliverable）
 
-与 HapRay 自动报告（`hapray_report.html` / `root_cause.md`）区分：本文档规范 **Agent 写给用户的独立 Markdown**，默认路径：
+与 HapRay 自动报告（`hapray_report.html` / `root_cause.md`）区分：本文档规范 **Agent 写给用户的独立高负载分析报告（Markdown）**，默认路径：
 
 `reports/hapray-analysis-<YYYYMMDD>-<app>-load-<suffix>.md`（`<PROJECT_ROOT>/reports/` 下）
 
@@ -29,13 +29,14 @@ reports/hapray-analysis-20260601-saltplayer-load-comparison.md
 
 | 条件 | 动作 |
 |------|------|
-| 存在 `trace_emptyFrame.json` 且未 `--no-root-cause` | **必须先完成阶段 5**；Read `<用例>/report/root_cause.md` |
-| `root_cause.md` 含 `Pending Agent Inference` | **禁止**写阶段 6；先按 [`empty-frame.md`](../root-cause/empty-frame.md) §0.3 完成 Agent 闭环 |
-| `root_cause.md` 为正式根因报告 | 在交付报告的根因章节中**引用并融合**其结论，将嫌疑条目按优先级整合到「根因分析与源码定位」章节 |
-| 用户 §0 跳过源码 / 无空刷 | 可省略空刷根因内容，在「未覆盖项」说明 |
+| 阶段4 high-load 已完成 | 报告主体（步骤指标、符号/帧/线程/IPC 热点）来自 high-load 真实产物，**非** `summary.json` 复述 |
+| 存在 `trace_emptyFrame.json` 且做了空刷根因 | Read `<用例>/report/root_cause.md`，将空刷 Top Suspects **融合**进第三章（与 B 全面根因统一排序） |
+| `root_cause.md` 含 `Pending Agent Inference` | **禁止**写阶段 6；先按 [`empty-frame.md`](../root-cause/empty-frame.md) §〇.3 完成 Agent 闭环 |
+| Agent 全面根因（B）已对非空刷高负载问题做源码级定位 | 各条作为独立根因条目进入第三章三段式 |
+| 用户 §0 跳过源码 / 无空刷 | root-cause 降级（仅证据无行号 / 仅 perf 产物级）；在「未覆盖项」说明 |
 
 ```text
-阶段 5 验收通过 → Read root_cause.md → 阶段 6 落盘
+阶段 4 high-load → 阶段 5 root-cause（A 空刷 + B 全面）→ 阶段 6 落盘融合
 ```
 
 ---
@@ -405,26 +406,23 @@ post 报告在 pre 报告基础上增加以下内容：
 
 ---
 
-## §空刷根因内容融合规范
+## §根因内容融合规范（A 空刷 + B 全面）
 
-**位置**：根因信息融合到 **第三章「根因分析与源码定位」**，不单独成章。
+**位置**：所有根因（空刷 A + 全面 B）融合到 **第三章「根因分析与源码定位」**，按 P0/P1/P2/P3 **统一排序**，不为空刷单独成章。
 
 **内容要求（MUST）**：
 
-1. **Read** 磁盘上的 `root_cause.md`（禁止凭记忆缩写）
-2. 将 root_cause.md 中的 Top Suspects 按优先级整合到 §三 的各条根因中：
-   - root_cause 的 HIGH 嫌疑 → 对应 P0 根因条目
-   - root_cause 的 MED 嫌疑 → 对应 P1 根因条目
-   - root_cause 的 LOW 嫌疑 → 对应 P2/P3 根因条目
-3. 每条根因的「HapRay 证据」部分引用 root_cause 的具体数据（空刷帧数、嫌疑排名、触发链路等）
-4. root_cause 中的 Caveats 和补充数据 → 融入「未覆盖项」或在相关根因中注明
+1. **A 空刷**：**Read** 磁盘上的 `root_cause.md`（禁止凭记忆缩写），将 Top Suspects 按置信度映射：HIGH→P0、MED→P1、LOW→P2/P3；每条「HapRay 证据」引用其具体数据（空刷帧数、嫌疑排名、触发链路）；Caveats → 融入「未覆盖项」。
+2. **B 全面**：阶段4 high-load 挖出的非空刷高负载问题（SO/符号热点、高负载帧、冗余线程、IPC、内存、组件复用），每条由 Agent 借源码定位后作为**独立根因条目**进入第三章三段式，与 A 一起按优先级排序。
+3. A 与 B **去重合并**：若某空刷嫌疑与某高负载热点指向同一源码点，合并为一条，证据取两侧并集。
 
 **禁止**：
 
 - 仅写 5 行摘要表 + 外链
 - 阶段 5 未完成却声称根因已分析
-- 内嵌内容与 `root_cause.md` 不一致（若需补充 Agent 解读，写在结论分级，不覆盖根因正文）
+- 融合内容与 `root_cause.md` 不一致（若需补充 Agent 解读，写在结论分级，不覆盖根因正文）
 - 将 root_cause.md 全文机械复制为独立章节（必须融合到 §三 的三段式结构中）
+- 只写空刷（A）而遗漏阶段4挖出的其余高负载根因（B）
 
 ---
 
@@ -450,11 +448,12 @@ post 报告在 pre 报告基础上增加以下内容：
 
 | 阶段 | 写入交付报告的内容 |
 |------|-------------------|
-| 3 gen-perf-report | `hapray_report.html` 摘要、增强火焰图结论 |
-| 4 analysis | scroll-jank / high-load / symbol-recovery 的「新发现」→ 融入 §三/§四 |
-| 5 root-cause | `root_cause.md` 的 Top Suspects → 融入 §三「根因分析与源码定位」的 HapRay 证据段；Caveats → 融入未覆盖项 |
+| 3（可选）符号恢复 | 增强火焰图符号级热点 → §四（未做则标注「建议符号恢复」） |
+| 4 analysis high-load | `report/` 真实产物（`summary.json` 步骤指标、`more_flame_graph.json`/`perf.db` 符号-SO 热点、`trace_*.json` 帧/IPC/复用、`redundant_thread_analysis.json`、`memory_report.xlsx`）→ 步骤指标 §二、热点 §四、新发现融入 §三 |
+| 5 root-cause（A 空刷） | `root_cause.md` 的 Top Suspects → 融入 §三 HapRay 证据段；Caveats → 未覆盖项 |
+| 5 root-cause（B 全面） | 非空刷高负载问题的源码级根因 → §三 独立条目，与 A 统一排序 |
 
-**禁止**：无证据的伪分析；仅复述 HTML 而无阶段 4 挖掘；有空刷却未引用 `root_cause.md` 数据；有空刷却未引用 `root_cause.md` 却声称完成根因分析。
+**禁止**：无证据的伪分析；仅复述 HTML 而无阶段4挖掘；有空刷却未引用 `root_cause.md` 数据却声称完成根因分析；只写空刷而遗漏阶段4其余高负载根因（B）。
 
 ---
 

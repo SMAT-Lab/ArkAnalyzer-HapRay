@@ -1,14 +1,17 @@
-> 主 Skill 路由：[`SKILL.md`](../SKILL.md) **阶段 3**（CLI 仍为 `update`）  
-> 产出：`hapray_report.html/json`、增强火焰图；**非** `reports/hapray-analysis-*.md`（阶段 6 见 [`report/analysis-deliverable.md`](../report/analysis-deliverable.md)）。  
-> 空刷 root-cause → [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)，不在本文档展开。
+> 主 Skill 路由：[`SKILL.md`](../SKILL.md) **阶段 3（可选符号恢复）**（CLI 为 `update --so_dir`）  
+> 产出：增强火焰图 `hiperf_report_with_inferred_symbols.html`、符号级热点；**仅在需要符号级定位时执行**。  
+> 空刷 / 全面 root-cause → [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)（独立阶段5，不在本文档展开）。
 
-# 生成工具性能报告（gen-perf-report）
+# 可选符号恢复（gen-perf-report，阶段 3）
+
+> **何时执行（仅按需）**：①用户明确要符号恢复 / 符号级热点；②阶段4 high-load 发现火焰图热点为 stripped 地址（`libxxx.so+0x..`），需符号才能继续符号级分析。  
+> **默认不执行**：`perf` 已产出 `report/` 全套分析器数据（含 `more_flame_graph.json`）；SO级/帧级/线程级高负载分析**不依赖**本阶段。无 SO 路径或用户跳过时，符号级热点标注「建议符号恢复」即可，**不要**为此默认跑 `update`。
 
 > **报告根目录（MUST）**：`<PROJECT_ROOT>/reports/<timestamp>/`（macOS 须先 [`ensure-workspace-layout.sh`](../scripts/ensure-workspace-layout.sh)）。`--report_dir` / `-r` 指向该 `<timestamp>` 目录，**禁止**使用工作区外的 `~/ArkAnalyzer-HapRay/reports/`。
 
 ### 3.1 SO 路径（§0 确认后写入 update）
 
-符号恢复须在 **§0 必问模板** 中索取 **SO 路径**（第 2 项）。第 1 项源码/HAP 路径属 **阶段 5 空刷根因** → [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)。
+符号恢复须在 **§0 必问模板** 中索取 **SO 路径**（第 2 项）。第 1 项源码/HAP 路径属 **阶段 5 root-cause** → [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)。
 
 | 用途 | 用户需提供 | CLI | 环境变量 |
 |------|------------|-----|----------|
@@ -33,14 +36,14 @@ uv run python -m scripts.main update \
 
 ---
 
-### 3.2 为何 perf 后必须 update
+### 3.2 符号恢复解决什么（仅符号级）
 
 | 步骤 | 产出 | 火焰图符号状态 |
 |------|------|----------------|
-| `perf` 采集 | `hiperf_report.html`、原始火焰图 | ❌ 仅有地址（`libxxx.so+0x1234`） |
-| `update` 符号恢复 | `hiperf_report_with_inferred_symbols.html` | ✅ 显示推断函数名 |
+| `perf` 采集 | `more_flame_graph.json`、`hiperf_report.html`、原始火焰图 | ❌ strip 的 SO 仅有地址（`libxxx.so+0x1234`） |
+| `update --so_dir` 符号恢复 | `hiperf_report_with_inferred_symbols.html` | ✅ 显示推断函数名 |
 
-不执行 update：火焰图无法函数级定位，热点无语义，优化缺少依据。采集见 [perf-collect.md](perf-collect.md)；命令模板见主 Skill **§14**。
+符号恢复**只影响符号级**：未做时 SO 级、帧级、线程级、IPC、空刷等分析**照常**（数据均在 `report/`）。仅当需要把 stripped 地址映射到函数名时才执行本阶段。采集见 [perf-collect.md](perf-collect.md)；高负载分析见 [analysis/high-load-analysis.md](../analysis/high-load-analysis.md)。
 
 ### 3.3 update 命令关键参数（符号恢复）
 

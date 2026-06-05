@@ -60,7 +60,7 @@
 ```text
 确认包名与场景 → [有应用源码? 分析源码定步骤 : 收集 UI 依据]
   → UI 坐标映射探测（§7.1.5）→ 编写 PerfLoad_*（process 首步 start_app → 应用内步骤 → 依赖 teardown 退出）
-  → prepare 完整试跑（失败则改脚本再 prepare）→ 通过 → perf → update
+  → prepare 完整试跑（失败则改脚本再 prepare）→ 通过 → perf → 读 report/ 高负载分析
 ```
 
 #### 1) 编写前路由：源码优先 vs 无源码（MUST）
@@ -282,7 +282,7 @@ uv run python -m scripts.main prepare \
 
 > **补充**：编写**前**可用 `hdc` 探路（查 Ability、截图、文案），但**不可替代** `prepare` 完整试跑。
 
-#### 4) `prepare` 通过后执行 `perf` → `update`
+#### 4) `prepare` 通过后执行 `perf`（产出 `report/`）
 
 ```bash
 cd <REPO_ROOT>/perf_testing
@@ -294,15 +294,15 @@ uv run python -m scripts.main perf \
 ```
 
 - `perf` 仍失败：结合 `prepare` / `perf` 日志修正脚本后，须重跑 `prepare` 通过再 `perf`。  
-- 随后 **必须** `update`（§0 路径）。`collection_mode=agent-authored`。
+- 随后**读 `<用例>/report/`** 进入阶段4 高负载分析（**默认不跑 `update`**；符号恢复按需）。`collection_mode=agent-authored`。
 
-> **二进制轨**：用例写在 `<PROJECT_ROOT>/testcases/` → `sync-testcases-to-runtime.sh` → `prepare` 通过 → `perf` → `update -r <PROJECT_ROOT>/reports/<timestamp>`。**禁止**默认 `gui-agent`。
+> **二进制轨**：用例写在 `<PROJECT_ROOT>/testcases/` → `sync-testcases-to-runtime.sh` → `prepare` 通过 → `perf`（产出 `report/`）→ 读 `report/` 高负载分析。**禁止**默认 `gui-agent`；符号恢复按需 `update -r <PROJECT_ROOT>/reports/<timestamp> --so_dir ...`。
 
 ### `gui-agent` 触发条件（仅优先级 3）
 
 - **仅当**用户在同一会话中**明确要求** `gui-agent`、AI 探索、或拒绝/无法编写 `PerfLoad_*` 脚本时。  
 - 缺 `GLM_API_KEY`：**STOP** 并提示配置；**不得**改用 `perf --manual` 或编造未落盘的用例名。  
-- `gui-agent` 完成后仍须 `update`（§0 路径）。
+- `gui-agent` 完成后同样**读 `report/`** 进入高负载分析（符号恢复按需）。
 
 ### `perf --manual`（30 秒）— 仅显式请求
 
@@ -312,6 +312,8 @@ uv run python -m scripts.main perf \
 
 ### 采集后（与模式无关）
 
-- `perf` 或 `gui-agent` 产出报告目录后，**必须**执行阶段 3 `update`（见 [gen-perf-report.md](gen-perf-report.md)）；阶段 5 空刷根因见 [empty-frame.md](../root-cause/empty-frame.md)，携带 §0 的 `--so_dir` / `--app-packages-dir`。
+- `perf` 或 `gui-agent` 产出报告目录后，**直接读 `<用例>/report/`**（已含 `summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json` 等）进入 **阶段4 高负载分析**（见 [analysis/README.md](../analysis/README.md)）。**默认不跑 `update`**。
+- **符号恢复（阶段3，按需）**：仅当需要符号级热点或火焰图为 stripped 地址时，执行 `update --so_dir`（见 [gen-perf-report.md](gen-perf-report.md)）。
+- **root-cause（阶段5，独立）**：空刷与全面根因走独立 `root-cause` CLI + Agent，携带 §0 的 `--source-dir`（见 [empty-frame.md](../root-cause/empty-frame.md)）。
 
 ---
