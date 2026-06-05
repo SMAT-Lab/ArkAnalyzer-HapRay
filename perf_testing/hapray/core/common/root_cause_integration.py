@@ -12,8 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from hapray.actions.root_cause_action import RootCauseAction
-from hapray.analyze.llm_root_cause import run_empty_frame_analysis
-from hapray.analyze.llm_root_cause.runner import apply_agent_result_to_report
+from hapray.analyze.llm_root_cause.runner import apply_agent_result_to_report, run_comprehensive_analysis
 from hapray.core.common.device_app_packages import (
     ROOT_CAUSE_INPUT_HAP,
     bundle_packages_dir,
@@ -58,12 +57,15 @@ def run_root_cause_for_case(
     *,
     skip_llm: bool = False,
 ) -> bool:
-    """对单个用例执行 root-cause；输出 ``report/root_cause.md`` 等。"""
-    if not trace_empty_frame_available(case_dir):
-        logger.info('Root-cause skipped for %s: no trace_emptyFrame.json', case_dir)
-        return False
-
+    """对单个用例执行多信号 root-cause；输出 ``report/root_cause.md`` 等。"""
     report_sub = scene_report_dir(case_dir)
+    if not report_sub.is_dir():
+        logger.info('Root-cause skipped for %s: no report directory', case_dir)
+        return False
+    if not trace_empty_frame_available(case_dir):
+        # 空刷已降为可选信号；无 trace_emptyFrame.json 仍可做其余高负载信号的全面根因。
+        logger.info('Root-cause for %s: no trace_emptyFrame.json; empty-frame is optional, continuing comprehensive.', case_dir)
+
     output_md = report_sub / 'root_cause.md'
     pkg_root = bundle_packages_dir(report_dir, bundle_name)
     if pkg_root.is_dir():
@@ -108,7 +110,7 @@ def run_root_cause_for_case(
         skip_llm,
     )
     try:
-        run_empty_frame_analysis(
+        run_comprehensive_analysis(
             report_dir=str(report_sub),
             output_path=str(output_md),
             llm_config=llm_config,
@@ -188,7 +190,7 @@ def embed_root_cause_into_hapray_html(case_dir: str) -> bool:
     block = (
         f'{_ROOT_CAUSE_MARKER}\n'
         '<div id="hapray-root-cause-panel" style="margin:16px;font-family:sans-serif;">\n'
-        '<h2>空刷根因分析（Root Cause）</h2>\n'
+        '<h2>性能根因分析（Root Cause）</h2>\n'
         f'<p><a href="{rel_md}" target="_blank">root_cause.md</a></p>\n'
         f'<pre style="white-space:pre-wrap;max-height:640px;overflow:auto;border:1px solid #ccc;'
         f'padding:12px;">{escaped}</pre>\n'

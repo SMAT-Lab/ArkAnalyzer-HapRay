@@ -199,6 +199,130 @@ def _with_source_system_prompt(language: str, domain_knowledge: str = '') -> str
     return base
 
 
+# ── comprehensive 模式（多信号全面根因，不限空刷）──────────────────────────
+
+_COMPREHENSIVE_SYSTEM_PROMPT_ZH = """你是 HarmonyOS / ArkUI 性能根因专家，做**多信号全面根因分析**（不限空刷）。
+
+## 你的任务
+你会收到按信号类别（category）分章的性能证据，**每一类都要评估**，输出结构化 JSON 根因报告。
+要求：**不要只复述证据，要给出推断结论和具体修复建议。** 每条根因须标明它来自哪个 `category`。
+
+## 信号类别与解读
+**suspect 类（可定位源码，进 `suspects`，须带 category 与尽量准确的 file/line/owner/symbol）**
+- `cpu-hotspot`：perf.db inclusive 聚合的高指令数函数。**ArkTS 帧符号自带 `源码:行`**，是最准的源码级根因——优先分析。叶子帧多归于 appspawn（字节码/JIT）属正常，以调用链聚合为准。
+- `frame-load`：高负载帧（flag=1 高负载 / 2 空刷），关注 max_load 与主线程帧。
+- `component-reuse`：复用率低（reusability_ratio 小）且 build 多的组件 → 对应 `.ets` 文件。
+- `thread`：冗余线程（若 has_redundancy=false / 各 step 为 0，则线程健康，写明“无冗余线程问题”即可，不要编造）。
+- `ipc`：高 QPS/事务数的进程对。**常是每帧 rerender 的下游表现**，优先核对是否由 UI 高负载驱动，而非独立根因。
+- `so-load`：原生库高负载（无源码行），可与 cpu-hotspot 交叉；第三方/旧库可提优化方向。
+- `memory`：高分配组件（componentName 可映射 ArkTS）。
+- `empty-frame`（可选，可能缺失）：空刷帧，proc_source_hints 含 `源码:行`。**缺失时不要假设有空刷问题。**
+
+**observation 类（现象，无源码行，进 `observations`）**
+- `frame-stats`：FPS、卡顿率、RS skip、vsync 异常 → 描述现象（如“高刷下卡顿低但主线程负载极高，关注功耗”）。
+- `ui-animate`：离树节点占比、超大图片、动画帧。
+- `fault-hilog`：故障树分解、hilog 规则命中（如图片未用 DMA）。
+
+## 分析原则
+- **以 cpu-hotspot 为主线**：它直接给出占指令数最高的源码函数；其余信号多为其表现或补充。
+- **去重合并**：若多个信号指向同一源码点，合并为一条，证据取并集。
+- **诚实**：信号为 0 / 健康时如实写明，不要凑数编造根因。observation 类不要硬塞 file:line。
+- **置信度**：`high`=多源证据指向同一源码点；`medium`=单一主证据；`low`=仅名称/现象推断。
+
+## 输出格式
+**必须输出合法 JSON**（不要输出其他内容；suspects 每条含 `category`，observations 每条含 `category`+`finding`）：
+
+```json
+{OUTPUT_SCHEMA}
+```
+"""
+
+_COMPREHENSIVE_SYSTEM_PROMPT_EN = """You are a HarmonyOS / ArkUI performance root-cause expert doing **multi-signal comprehensive analysis** (not limited to empty frames).
+
+## Your Task
+You receive performance evidence grouped by signal `category`. Evaluate EVERY category and output a
+structured JSON root-cause report. Do not merely restate evidence — give conclusions and concrete fixes.
+Each root cause must state its source `category`.
+
+## Signal categories
+suspect (source-locatable → `suspects`, each with category + file/line/owner/symbol when possible):
+- `cpu-hotspot`: top instruction-count functions from perf.db inclusive aggregation. ArkTS frame symbols
+  carry `source:line` — the most accurate source-level root cause; analyze first.
+- `frame-load`, `component-reuse`, `thread`, `ipc`, `so-load`, `memory`, `empty-frame` (optional, may be absent).
+
+observation (phenomena, no source line → `observations`): `frame-stats`, `ui-animate`, `fault-hilog`.
+
+## Principles
+- Make cpu-hotspot the main thread of analysis; dedupe signals pointing at the same source location.
+- Be honest: if a signal is zero/healthy, say so; don't fabricate. Don't force file:line on observations.
+
+## Output Format
+Output valid JSON only:
+
+```json
+{OUTPUT_SCHEMA}
+```
+"""
+
+
+def _comprehensive_system_prompt(language: str, domain_knowledge: str = '') -> str:
+    base = _COMPREHENSIVE_SYSTEM_PROMPT_ZH if language == 'zh' else _COMPREHENSIVE_SYSTEM_PROMPT_EN
+    base = base.replace('{OUTPUT_SCHEMA}', OUTPUT_EXAMPLE_STR)
+    if domain_knowledge and domain_knowledge.strip():
+        section_title = '## 领域先验知识\n\n以下是人工积累的分析经验，请参考：\n\n'
+        base = base.rstrip() + '\n\n' + section_title + domain_knowledge.strip() + '\n'
+    return base
+
+
+def _build_comprehensive_user_prompt(
+    context_text: str,
+    structured_evidence: dict[str, Any] | None,
+    code_snippets: list[dict[str, Any]] | None = None,
+) -> str:
+    """comprehensive 模式 user prompt：按 category 分章渲染证据 + 源码片段。"""
+    parts: list[str] = []
+    parts.append('请对以下**多信号**性能证据做全面根因分析（不限空刷），逐类评估并推断根因。\n')
+    parts.append('## 性能摘要\n')
+    parts.append(context_text)
+
+    sections = (structured_evidence or {}).get('sections', {})
+    if sections:
+        parts.append('\n## 分信号证据（按 category 分章）\n')
+        for cat, sec in sections.items():
+            kind = sec.get('kind', '')
+            parts.append(f'\n### [{kind}] {cat}\n')
+            parts.append('```json')
+            payload = {
+                'category': sec.get('category', cat),
+                'kind': kind,
+                'summary': sec.get('summary', {}),
+                'items': (sec.get('items') or [])[:15],
+            }
+            for extra_key in ('dominant_threads', 'representative_frames', 'caveats'):
+                if sec.get(extra_key):
+                    payload[extra_key] = sec[extra_key]
+            parts.append(json.dumps(payload, ensure_ascii=False, indent=2))
+            parts.append('```')
+
+    if code_snippets:
+        parts.append('\n## 关联源码片段（请在分析中直接引用相关代码行）\n')
+        for i, item in enumerate(code_snippets[:12], 1):
+            owner = item.get('owner_name', 'unknown')
+            symbol = item.get('symbol_name', 'unknown')
+            file_name = item.get('file', 'unknown')
+            line_start = item.get('line_start', 0)
+            cat = item.get('category', '')
+            snippet = item.get('code_snippet') or ''
+            parts.append(f'### [{i}] {owner}.{symbol}  ({file_name}:{line_start})  [{cat}]\n')
+            if snippet.strip():
+                parts.append('```typescript')
+                parts.append(snippet.rstrip())
+                parts.append('```\n')
+
+    parts.append('\n请输出 JSON 根因报告（suspects 每条含 category；observations 单列现象），不要输出其他内容。')
+    return '\n'.join(parts).strip() + '\n'
+
+
 # ── 公共接口 ──────────────────────────────────────────────────────────────
 
 
@@ -217,6 +341,8 @@ def get_system_prompt(
     domain_knowledge : str
         从 knowledge/ 目录加载的先验知识文本，注入 system prompt。
     """
+    if checker == 'comprehensive':
+        return _comprehensive_system_prompt(language, domain_knowledge=domain_knowledge)
     if mode == 'with_source':
         return _with_source_system_prompt(language, domain_knowledge=domain_knowledge)
     return _analyze_system_prompt(language, domain_knowledge=domain_knowledge)
@@ -237,6 +363,12 @@ def build_user_prompt(
     mode="analyze"     : 传入结构化证据 JSON（+ 可选代码片段），LLM 独立推断根因
     mode="with_source" : 传入代码片段 + 调用链 + 精简证据，LLM 阅读代码给出行级建议
     """
+    if checker == 'comprehensive':
+        return _build_comprehensive_user_prompt(
+            context_text=context_text,
+            structured_evidence=structured_evidence,
+            code_snippets=code_snippets or [],
+        )
     if mode == 'with_source':
         return _build_with_source_user_prompt(
             context_text=context_text,

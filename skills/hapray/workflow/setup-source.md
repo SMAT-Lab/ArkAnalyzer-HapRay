@@ -20,10 +20,12 @@
 
 不得执行包括但不限于：
 
-- `uv run python -m scripts.main perf ...`、`update`、`static`、`dbtools` 相关采集与报告链路；  
+- `uv run python -m scripts.main perf ...`、`static`、`dbtools` 相关采集与报告链路；以及可选的 `update`（符号恢复，阶段3）；  
 - 依赖 **`web/dist/`** 或 **`perf_testing/resource/web/`**（报告模板资源）的任何报告生成步骤；  
 - 依赖 **`dist/tools/sa-cmd/`**（`hapray-sa-cmd`）的静态分析步骤；  
-- **symbol_recovery**：`tools/symbol_recovery/main.py`（含 `--skip-step1`）、以及 `hapray update` 触发的符号恢复子进程。
+- **symbol_recovery**：`tools/symbol_recovery/main.py`（含 `--skip-step1`）、以及**可选阶段3** `hapray update --so_dir` 触发的符号恢复子进程。
+
+> **门禁性质澄清**：本节 7 步是「源码轨能否跑起来」的环境门禁，与「perf 后是否跑 update」无关。构建完成后，**默认流程**是 `perf` → 读 `report/` 做高负载分析（不跑 update）；符号恢复是可选阶段3，root-cause 走独立 CLI。第 5 步 symbol_recovery venv 的硬门禁主要服务于 `perf.data→perf.db` 与可选符号恢复。
 
 若用户坚持「我就要现在跑」，必须先输出**阻塞原因**：缺哪项构建/安装 + 本节对应命令。
 

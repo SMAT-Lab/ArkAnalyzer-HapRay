@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 
 from hapray.analyze.llm_root_cause import run_empty_frame_analysis
+from hapray.analyze.llm_root_cause.runner import run_comprehensive_analysis
 from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.config.config import Config
 
@@ -71,9 +72,18 @@ class RootCauseAction:
         )
         parser.add_argument(
             '--checker',
-            default='empty-frame',
-            choices=['empty-frame'],
-            help='Analysis checker type (default: empty-frame)',
+            default='comprehensive',
+            choices=['comprehensive', 'empty-frame'],
+            help='Analysis checker: comprehensive (default, multi-signal) or empty-frame (legacy, empty-frame only)',
+        )
+        parser.add_argument(
+            '--categories',
+            default=None,
+            help=(
+                'comprehensive 模式下精选信号类别（逗号分隔），如 '
+                'cpu-hotspot,frame-load,thread,ipc,so-load,component-reuse,memory,empty-frame,'
+                'frame-stats,ui-animate,fault-hilog；不填则全部可用信号'
+            ),
         )
         parser.add_argument(
             '--output',
@@ -161,19 +171,36 @@ class RootCauseAction:
         try:
             logging.info('Starting LLM root cause analysis...')
             logging.info('  Report dir : %s', report_dir)
+            logging.info('  Checker    : %s', parsed.checker)
             logging.info('  LLM mode   : %s', parsed.llm_mode)
             logging.info('  Output     : %s', output_path)
 
-            run_empty_frame_analysis(
-                report_dir=str(report_dir),
-                output_path=output_path,
-                llm_config=llm_config,
-                index_dir=parsed.index_dir,
-                source_dir=parsed.source_dir,
-                llm_mode=parsed.llm_mode,
-                stream=parsed.stream,
-                skip_llm=parsed.skip_llm,
-            )
+            if parsed.checker == 'comprehensive':
+                enabled_categories = None
+                if parsed.categories:
+                    enabled_categories = [c.strip() for c in parsed.categories.split(',') if c.strip()]
+                run_comprehensive_analysis(
+                    report_dir=str(report_dir),
+                    output_path=output_path,
+                    llm_config=llm_config,
+                    index_dir=parsed.index_dir,
+                    source_dir=parsed.source_dir,
+                    llm_mode=parsed.llm_mode,
+                    stream=parsed.stream,
+                    skip_llm=parsed.skip_llm,
+                    enabled_categories=enabled_categories,
+                )
+            else:
+                run_empty_frame_analysis(
+                    report_dir=str(report_dir),
+                    output_path=output_path,
+                    llm_config=llm_config,
+                    index_dir=parsed.index_dir,
+                    source_dir=parsed.source_dir,
+                    llm_mode=parsed.llm_mode,
+                    stream=parsed.stream,
+                    skip_llm=parsed.skip_llm,
+                )
 
             logging.info('Root cause analysis complete: %s', output_path)
             return (0, output_path)
