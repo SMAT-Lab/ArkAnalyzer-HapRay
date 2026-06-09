@@ -723,6 +723,10 @@ class UpdateAction:
         Config.set('symbol_recovery_no_llm', bool(parsed_args.symbol_recovery_no_llm))
         Config.set('symbol_recovery_use_llm_mode', use_llm_mode)
         Config.set('symbol_recovery_agent_mode', agent_mode)
+        # update 自带专门的符号恢复编排（process_reports → _run_symbol_recovery_for_case）。
+        # 置位后，report 重生成阶段的 PerfAnalyzer 内嵌符号恢复只产出负载拆解排序、跳过 SR 执行，
+        # 避免一次 update 内对同一 step 重复跑符号恢复（见 perf_analyzer._maybe_apply_symbol_recovery）。
+        Config.set('symbol_recovery_managed_by_update', True)
         Config.set('symbol_recovery_import_results', (parsed_args.symbol_recovery_import_results or '').strip())
         Config.set(
             'symbol_recovery_timeout',
@@ -1184,6 +1188,22 @@ class UpdateAction:
         return tval if tval > 0 else None
 
     @staticmethod
+    def _top_symbols_json_extra_args(case_dir: str, step_name: str) -> Optional[list]:
+        """复用 PerfAnalyzer 落盘的 ecol 负载拆解排序（--top-symbols-json）。
+
+        update 下 PerfAnalyzer 内嵌符号恢复已降级为「只出排序」，会在
+        ``.symbol_recovery/<step>/load_decomposition_top_symbols.json`` 落盘 ecol 口径。
+        这里把它接力给符号恢复子进程，保证 update 与 perf 集成轨用同一拆解口径；
+        文件缺失时返回 None，子进程回退内部 perf.db 排序（优雅降级）。
+        """
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        out_dir = default_symbol_recovery_output_dir(case_dir, step_name, output_root)
+        top_symbols = out_dir / 'load_decomposition_top_symbols.json'
+        if top_symbols.is_file():
+            return ['--top-symbols-json', str(top_symbols)]
+        return None
+
+    @staticmethod
     def _run_agent_inference_for_step(
         out_dir: Path,
         *,
@@ -1341,6 +1361,7 @@ class UpdateAction:
         import_tpl = (Config.get('symbol_recovery_import_results', '') or '').strip()
         import_results: Optional[str] = import_tpl.replace('{step}', step_name) if import_tpl else None
         out_dir = default_symbol_recovery_output_dir(case_dir, step_name, output_root)
+        top_symbols_extra = UpdateAction._top_symbols_json_extra_args(case_dir, step_name)
 
         if import_results:
             logging.info('Agent mode: importing precomputed results for %s/%s: %s', case_dir, step_name, import_results)
@@ -1353,6 +1374,7 @@ class UpdateAction:
                 stat_method=stat_method,
                 output_root=output_root,
                 subprocess_timeout_sec=timeout_sec,
+                extra_args=top_symbols_extra,
                 prompt_only=False,
                 import_llm_results=import_results,
             )
@@ -1369,6 +1391,7 @@ class UpdateAction:
             stat_method=stat_method,
             output_root=output_root,
             subprocess_timeout_sec=timeout_sec,
+            extra_args=top_symbols_extra,
             prompt_only=True,
         )
         if not ok:
@@ -1388,6 +1411,7 @@ class UpdateAction:
             stat_method=stat_method,
             output_root=output_root,
             subprocess_timeout_sec=timeout_sec,
+            extra_args=top_symbols_extra,
             prompt_only=False,
             import_llm_results=inferred_json,
         )
@@ -1452,7 +1476,7 @@ class UpdateAction:
                         stat_method=stat_method,
                         output_root=output_root,
                         subprocess_timeout_sec=timeout_sec,
-                        extra_args=None,
+                        extra_args=UpdateAction._top_symbols_json_extra_args(str(case_dir), step_name),
                         prompt_only=False,
                     )
                     if llm_success and UpdateAction._check_symbol_recovery_results_valid(str(case_dir), step_name):
@@ -1602,12 +1626,17 @@ class UpdateAction:
             logging.info('Symbol recovery completed for all test cases')
             logging.info('=' * 80)
 
-            logging.info('Refreshing composite hapray_report.html to embed enhanced flame graphs...')
-            for case_dir in testcase_dirs:
-                try:
-                    report_generator.refresh_hapray_report_after_symbol_recovery(case_dir)
-                except Exception as e:
-                    logging.error('Failed to refresh hapray_report.html for %s: %s', case_dir, e)
+            # 若随后还要跑 root-cause，则其结束后会再做一次 refresh（同样会嵌入增强火焰图），
+            # 这里就跳过本次 refresh，避免对百 MB 级 trace 数据做重复的 clean+压缩+生成 HTML（一次可省数十秒）。
+            if bool(Config.get('root_cause_enabled', False)):
+                logging.info('Deferring composite refresh: root-cause pass will regenerate hapray_report.html once.')
+            else:
+                logging.info('Refreshing composite hapray_report.html to embed enhanced flame graphs...')
+                for case_dir in testcase_dirs:
+                    try:
+                        report_generator.refresh_hapray_report_after_symbol_recovery(case_dir)
+                    except Exception as e:
+                        logging.error('Failed to refresh hapray_report.html for %s: %s', case_dir, e)
 
         if bool(Config.get('root_cause_enabled', False)):
             logging.info('=' * 80)

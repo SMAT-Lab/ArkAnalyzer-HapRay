@@ -42,6 +42,12 @@ from hapray.core.common.symbol_recovery_bridge import apply_symbol_recovery_mani
 from hapray.core.config.config import Config
 from hapray.mode.mode import Mode
 
+# 报告内嵌数据的压缩级别。实测在本项目的大体量 JSON（火焰图/trace/最终结果，百 MB 级）上，
+# zlib level=6 与 level=9 的输出体积几乎相同（差 <4%），但 level=6 压缩耗时仅约 1/3~1/4。
+# HTML 生成阶段会对多个大字段反复压缩，故统一降到 6 以大幅缩短报告生成时间，体积代价可忽略。
+_REPORT_ZLIB_LEVEL = 6
+_REPORT_GZIP_LEVEL = 6
+
 
 def _hiperf_step_sort_key(step_dir_name: str) -> int:
     m = re.match(r'^step(\d+)$', step_dir_name, re.IGNORECASE)
@@ -306,7 +312,7 @@ class ReportData:
         json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
             f.write(json_str)
-        compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=9)
+        compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
         base64_bytes = base64.b64encode(compressed_bytes)
         return base64_bytes.decode('ascii')
 
@@ -364,7 +370,7 @@ class ReportData:
             if isinstance(step_data, str) and step_data:
                 try:
                     # 压缩单个步骤的数据
-                    compressed_bytes = zlib.compress(step_data.encode('utf-8'), level=9)
+                    compressed_bytes = zlib.compress(step_data.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                     base64_bytes = base64.b64encode(compressed_bytes)
                     compressed_flame_graph[step_key] = base64_bytes.decode('ascii')
 
@@ -418,7 +424,7 @@ class ReportData:
                     original_size = len(step_json)
 
                     # 压缩步骤数据
-                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                     base64_bytes = base64.b64encode(compressed_bytes)
                     compressed_step = base64_bytes.decode('ascii')
 
@@ -477,7 +483,7 @@ class ReportData:
                     original_size = len(step_json)
 
                     # 压缩步骤数据
-                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                     base64_bytes = base64.b64encode(compressed_bytes)
                     compressed_step = base64_bytes.decode('ascii')
 
@@ -544,7 +550,7 @@ class ReportData:
                     continue
 
                 # 压缩数据
-                compressed_bytes = zlib.compress(field_json.encode('utf-8'), level=9)
+                compressed_bytes = zlib.compress(field_json.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                 base64_bytes = base64.b64encode(compressed_bytes)
                 compressed_data = base64_bytes.decode('ascii')
 
@@ -1081,7 +1087,7 @@ class ReportGenerator:
         try:
             with open(file_path, 'rb') as f:
                 raw_data = f.read()
-            compressed = gzip.compress(raw_data, compresslevel=9)
+            compressed = gzip.compress(raw_data, compresslevel=_REPORT_GZIP_LEVEL)
             data_b64 = base64.b64encode(compressed).decode('ascii')
             return data_b64, filename
         except Exception as e:
@@ -1112,7 +1118,7 @@ class ReportGenerator:
                 db_data = f.read()
 
             # 使用 gzip 压缩
-            compressed_data = gzip.compress(db_data, compresslevel=9)
+            compressed_data = gzip.compress(db_data, compresslevel=_REPORT_GZIP_LEVEL)
 
             # Base64 编码
             base64_data = base64.b64encode(compressed_data).decode('ascii')
