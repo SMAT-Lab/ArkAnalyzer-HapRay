@@ -42,6 +42,12 @@ from hapray.core.common.symbol_recovery_bridge import apply_symbol_recovery_mani
 from hapray.core.config.config import Config
 from hapray.mode.mode import Mode
 
+# 报告内嵌数据的压缩级别。实测在本项目的大体量 JSON（火焰图/trace/最终结果，百 MB 级）上，
+# zlib level=6 与 level=9 的输出体积几乎相同（差 <4%），但 level=6 压缩耗时仅约 1/3~1/4。
+# HTML 生成阶段会对多个大字段反复压缩，故统一降到 6 以大幅缩短报告生成时间，体积代价可忽略。
+_REPORT_ZLIB_LEVEL = 6
+_REPORT_GZIP_LEVEL = 6
+
 
 def _hiperf_step_sort_key(step_dir_name: str) -> int:
     m = re.match(r'^step(\d+)$', step_dir_name, re.IGNORECASE)
@@ -306,7 +312,7 @@ class ReportData:
         json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
             f.write(json_str)
-        compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=9)
+        compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
         base64_bytes = base64.b64encode(compressed_bytes)
         return base64_bytes.decode('ascii')
 
@@ -364,7 +370,7 @@ class ReportData:
             if isinstance(step_data, str) and step_data:
                 try:
                     # 压缩单个步骤的数据
-                    compressed_bytes = zlib.compress(step_data.encode('utf-8'), level=9)
+                    compressed_bytes = zlib.compress(step_data.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                     base64_bytes = base64.b64encode(compressed_bytes)
                     compressed_flame_graph[step_key] = base64_bytes.decode('ascii')
 
@@ -418,7 +424,7 @@ class ReportData:
                     original_size = len(step_json)
 
                     # 压缩步骤数据
-                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                     base64_bytes = base64.b64encode(compressed_bytes)
                     compressed_step = base64_bytes.decode('ascii')
 
@@ -477,7 +483,7 @@ class ReportData:
                     original_size = len(step_json)
 
                     # 压缩步骤数据
-                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                     base64_bytes = base64.b64encode(compressed_bytes)
                     compressed_step = base64_bytes.decode('ascii')
 
@@ -544,7 +550,7 @@ class ReportData:
                     continue
 
                 # 压缩数据
-                compressed_bytes = zlib.compress(field_json.encode('utf-8'), level=9)
+                compressed_bytes = zlib.compress(field_json.encode('utf-8'), level=_REPORT_ZLIB_LEVEL)
                 base64_bytes = base64.b64encode(compressed_bytes)
                 compressed_data = base64_bytes.decode('ascii')
 
@@ -654,8 +660,14 @@ class ReportData:
 
         flame_graph_path = os.path.join(report_dir, 'more_flame_graph.json')
         flame_graph_data = self._load_json_safe(flame_graph_path, default={})
+        # 始终尝试用符号恢复增强火焰图替换/补齐：即便 more_flame_graph.json 缺失或为空，
+        # 只要 hiperf/<step>/hiperf_report_with_inferred_symbols.html 存在也应嵌入。
+        # 注意（顺序契约）：此替换发生在 ReportData.__str__ 的 _compress_flame_graph_by_steps 之前，
+        # 由其把替换后的完整 HTML 字符串压缩进 JSON；切勿调换两步顺序，否则增强 HTML 会被丢弃。
+        flame_graph_data = self._replace_flame_graph_with_symbol_recovery_html(
+            scene_dir, flame_graph_data if isinstance(flame_graph_data, dict) else {}
+        )
         if flame_graph_data:
-            flame_graph_data = self._replace_flame_graph_with_symbol_recovery_html(scene_dir, flame_graph_data)
             self.result['more']['flame_graph'] = flame_graph_data
         elif required:
             logging.warning('Flame graph data not found at %s', flame_graph_path)
@@ -705,18 +717,37 @@ class ReportData:
 
     @staticmethod
     def _replace_flame_graph_with_symbol_recovery_html(scene_dir: str, flame_graph_data: dict) -> dict:
-        """若增强版火焰图 HTML 已生成，则在总报告中直接使用其完整内容。"""
+        """若增强版火焰图 HTML 已生成，则在总报告中直接使用其完整内容。
+
+        - 已有的 step：用增强 HTML 覆盖。
+        - flame_graph_data 中缺失、但磁盘存在 hiperf/<step>/hiperf_report_with_inferred_symbols.html
+          的 step：补齐进来（防止 more_flame_graph.json 缺失时增强火焰图丢失）。
+        """
         if not isinstance(flame_graph_data, dict):
-            return flame_graph_data
+            flame_graph_data = {}
         updated = dict(flame_graph_data)
         hiperf_dir = Path(scene_dir) / 'hiperf'
-        for step_key in list(updated.keys()):
+
+        # 候选 step：已有的 + 磁盘上存在增强火焰图的（去重保序）
+        step_keys = list(updated.keys())
+        if hiperf_dir.is_dir():
+            for step_dir in sorted(hiperf_dir.glob('step*')):
+                if step_dir.is_dir() and step_dir.name not in updated:
+                    step_keys.append(step_dir.name)
+
+        for step_key in step_keys:
             detail_html = hiperf_dir / step_key / 'hiperf_report_with_inferred_symbols.html'
             if not detail_html.is_file():
                 continue
             try:
-                updated[step_key] = detail_html.read_text(encoding='utf-8', errors='replace')
-                logging.info('Using symbol-recovered flame graph html for %s: %s', step_key, detail_html)
+                html_text = detail_html.read_text(encoding='utf-8', errors='replace')
+                updated[step_key] = html_text
+                logging.info(
+                    'Using symbol-recovered flame graph html for %s: %s (%d bytes)',
+                    step_key,
+                    detail_html,
+                    len(html_text),
+                )
             except OSError as e:
                 logging.warning('Failed to read symbol-recovered flame graph html %s: %s', detail_html, e)
         return updated
@@ -1056,7 +1087,7 @@ class ReportGenerator:
         try:
             with open(file_path, 'rb') as f:
                 raw_data = f.read()
-            compressed = gzip.compress(raw_data, compresslevel=9)
+            compressed = gzip.compress(raw_data, compresslevel=_REPORT_GZIP_LEVEL)
             data_b64 = base64.b64encode(compressed).decode('ascii')
             return data_b64, filename
         except Exception as e:
@@ -1087,7 +1118,7 @@ class ReportGenerator:
                 db_data = f.read()
 
             # 使用 gzip 压缩
-            compressed_data = gzip.compress(db_data, compresslevel=9)
+            compressed_data = gzip.compress(db_data, compresslevel=_REPORT_GZIP_LEVEL)
 
             # Base64 编码
             base64_data = base64.b64encode(compressed_data).decode('ascii')
@@ -1150,21 +1181,44 @@ class ReportGenerator:
 
     @staticmethod
     def _patch_flame_graph_runtime_for_full_html(html_content: str) -> str:
-        """让打包后的 FlameGraph 组件支持 step 数据直接为完整 HTML。"""
-        needle = (
-            'if(n.flameGraph&&n.flameGraph[l]){let u=n.flameGraph[l];return '
-            'typeof u=="string"&&!u.startsWith("{")&&(u=i(u)),UU+KU+u+r}else return UU+KU+r'
+        """让打包后的 FlameGraph 组件支持 step 数据直接为完整 HTML。
+
+        模板里这段逻辑由 Vite 压缩生成，形如：
+
+            if(n.flameGraph&&n.flameGraph[l]){let u=n.flameGraph[l];return
+            typeof u=="string"&&!u.startsWith("{")&&(u=i(u)),UU+KU+u+a}else return UU+KU+a
+
+        其中 ``u``（step 值）、``i``（解压函数）、``UU``/``KU``（HTML 前缀片段）、
+        以及尾部变量（``a``/``r`` 等）都是压缩器生成的标识符，**每次重新构建 web 包都可能变化**。
+        早期实现用硬编码的完整片段做字符串匹配，一旦压缩变量漂移（如尾部 ``r``→``a``）就匹配失败，
+        补丁被静默跳过，符号恢复后的完整 HTML 火焰图虽已嵌入数据却无法渲染。
+
+        因此改为按结构用正则匹配并捕获实际标识符，再据此拼出替换逻辑：当 step 值本身已是完整
+        HTML 页面（``<!DOCTYPE``/``<html`` 开头，符号恢复增强火焰图即如此）时直接使用，
+        否则维持原「非 ``{`` 开头则解压、再拼接前缀」的行为。
+        """
+        # 捕获组：1=step 变量(u) 2=解压函数(i) 3=前缀片段A(UU) 4=前缀片段B(KU) 5=尾部变量(a/r)
+        pattern = re.compile(
+            r'if\(n\.flameGraph&&n\.flameGraph\[l\]\)\{let u=n\.flameGraph\[l\];'
+            r'return typeof (\w+)=="string"&&!\1\.startsWith\("\{"\)&&\(\1=(\w+)\(\1\)\),'
+            r'(\w+)\+(\w+)\+\1\+(\w+)\}else return \3\+\4\+\5'
         )
+        match = pattern.search(html_content)
+        if not match:
+            logging.warning('Flame graph runtime patch skipped: compiled snippet not found in report template')
+            return html_content
+
+        u, decomp_fn, prefix_a, prefix_b, tail = match.groups()
         replacement = (
-            'if(n.flameGraph&&n.flameGraph[l]){let u=n.flameGraph[l];'
-            'if(typeof u=="string"){const d=u.trimStart();'
-            'd.startsWith("<!DOCTYPE")||d.startsWith("<html")?u=d:!d.startsWith("{")&&(u=i(u))}'
-            'return typeof u=="string"&&u.trimStart().startsWith("<")?u:UU+KU+u+r}else return UU+KU+r'
+            f'if(n.flameGraph&&n.flameGraph[l]){{let {u}=n.flameGraph[l];'
+            f'if(typeof {u}=="string"){{const __d={u}.trimStart();'
+            f'__d.startsWith("<!DOCTYPE")||__d.startsWith("<html")?{u}=__d:'
+            f'!__d.startsWith("{{")&&({u}={decomp_fn}({u}))}}'
+            f'return typeof {u}=="string"&&{u}.trimStart().startsWith("<")?{u}:'
+            f'{prefix_a}+{prefix_b}+{u}+{tail}}}else return {prefix_a}+{prefix_b}+{tail}'
         )
-        if needle in html_content:
-            return html_content.replace(needle, replacement, 1)
-        logging.warning('Flame graph runtime patch skipped: compiled snippet not found in report template')
-        return html_content
+        logging.info('Flame graph runtime patch applied (vars: step=%s decomp=%s tail=%s)', u, decomp_fn, tail)
+        return html_content[: match.start()] + replacement + html_content[match.end() :]
 
     @staticmethod
     def _load_json_safe(path: str, default):

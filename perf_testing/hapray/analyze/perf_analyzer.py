@@ -179,6 +179,25 @@ class PerfAnalyzer(BaseAnalyzer):
         ):
             return False
         top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
+        # update 接管符号恢复编排（UpdateAction._run_symbol_recovery_for_case）：
+        # 本路径只产出 ecol 负载拆解排序（load_decomposition_top_symbols.json）供其复用 --top-symbols-json，
+        # 跳过 SR 子进程与内嵌，避免一次 update 内对同一 step 重复执行符号恢复。
+        if bool(Config.get('symbol_recovery_managed_by_update', False)):
+            managed_output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+            managed_out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, managed_output_root)
+            try:
+                self._dump_load_decomposition_top_symbols(
+                    step_dir,
+                    perf_db_path,
+                    managed_out_dir,
+                    so_dir=so_dir or None,
+                    top_n=top_n,
+                )
+            except Exception as e:  # noqa: BLE001 - 排序口径产出失败不应阻断报告生成
+                logging.debug(
+                    'Deferred load-decomposition dump failed for %s/%s: %s', self.scene_dir, step_dir, e
+                )
+            return False
         # update 集成路径：导出 load_decomposition_top_symbols.json（ecol 等拆解）并 --top-symbols-json；
         # 不用 perf.db 单 SQL 冒充拆解口径。
         stat_method = 'event_count'

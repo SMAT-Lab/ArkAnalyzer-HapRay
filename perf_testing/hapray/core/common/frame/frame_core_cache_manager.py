@@ -94,6 +94,80 @@ def cached(cache_key: str, stats_key: str = None):
     return decorator
 
 
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (table,))
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set:
+    try:
+        cur = conn.cursor()
+        cur.execute(f'PRAGMA table_info({table})')
+        return {row[1] for row in cur.fetchall()}
+    except Exception:
+        return set()
+
+
+# 表 -> 索引定义列表 [(索引名, [列, ...]), ...]
+# 仅当表存在且所有列都存在时才创建（trace_streamer 版本不同字段可能有差异）。
+_PERF_TRACE_INDEX_SPECS: dict[str, list[tuple[str, list[str]]]] = {
+    'instant': [
+        ('idx_hr_instant_ref_ts', ['ref', 'ts']),
+        ('idx_hr_instant_name_reftype_ts', ['name', 'ref_type', 'ts']),
+    ],
+    'perf_sample': [
+        ('idx_hr_perfsample_tid_ts', ['thread_id', 'timestamp_trace']),
+    ],
+    'perf_callchain': [
+        ('idx_hr_perfcallchain_id', ['callchain_id']),
+    ],
+    'perf_files': [
+        ('idx_hr_perffiles_fid_sid', ['file_id', 'serial_id']),
+    ],
+    'thread_state': [
+        ('idx_hr_threadstate_itid_ts', ['itid', 'ts']),
+    ],
+    'thread': [
+        ('idx_hr_thread_itid', ['itid']),
+        ('idx_hr_thread_id', ['id']),
+    ],
+}
+
+
+def ensure_perf_trace_indexes(conn: Optional[sqlite3.Connection]) -> None:
+    """为 trace.db/perf.db 的热点表建立索引（幂等、防御式）。
+
+    trace_streamer 产出的数据库不带索引，导致唤醒链/帧负载/调用链等查询全表扫描。
+    本函数对存在的表与列创建 ``CREATE INDEX IF NOT EXISTS``；任何失败（只读库、字段缺失等）
+    仅告警、不抛出，保证不影响后续分析逻辑。
+    """
+    if conn is None:
+        return
+    created = 0
+    for table, specs in _PERF_TRACE_INDEX_SPECS.items():
+        if not _table_exists(conn, table):
+            continue
+        cols = _table_columns(conn, table)
+        for index_name, index_cols in specs:
+            if not all(c in cols for c in index_cols):
+                continue
+            try:
+                conn.execute(f'CREATE INDEX IF NOT EXISTS {index_name} ON {table} ({", ".join(index_cols)})')
+                created += 1
+            except Exception as e:  # noqa: BLE001 - 索引失败不应阻断分析
+                logging.warning('创建索引 %s(%s) 失败: %s', table, ', '.join(index_cols), e)
+    if created:
+        try:
+            conn.commit()
+        except Exception as e:  # noqa: BLE001
+            logging.warning('提交索引创建失败: %s', e)
+        logging.info('[性能优化] 已确保 %d 个 perf/trace 索引存在', created)
+
+
 class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disable=too-many-public-methods
     """帧缓存管理器 - 负责缓存管理和数据访问委托
 
@@ -175,6 +249,13 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
         FramePerfAccessor.__init__(self, self.perf_conn)
         FrameTraceAccessor.__init__(self, self.trace_conn)
 
+        # 性能优化：为热点表建立索引（幂等）。trace.db/perf.db 由 trace_streamer 生成时不带索引，
+        # 导致唤醒链、帧负载、调用链等逐线程/逐帧查询退化为全表扫描（instant/thread_state/
+        # perf_callchain 均为百万级）。建索引后这些查询走索引，是两大瓶颈提速的基础。
+        ensure_perf_trace_indexes(self.trace_conn)
+        if self.perf_conn is not None and self.perf_conn is not self.trace_conn:
+            ensure_perf_trace_indexes(self.perf_conn)
+
         # 【新增】自动查找并添加ArkWeb render进程
         if self.trace_conn and self.app_pids:
             self._expand_arkweb_render_processes()
@@ -182,6 +263,9 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
         # ==================== 实例变量：缓存存储 ====================
         self._callchain_cache = None
         self._files_cache = None
+        # 派生 dict 索引（基于上面两个 DataFrame 构建一次，加速逐条查找）
+        self._callchain_index_cache = None
+        self._files_index_cache = None
         self._pid_cache = None
         self._tid_cache = None
         self._process_cache = None
@@ -297,6 +381,55 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
             logging.warning('perf_conn未建立，无法获取文件缓存')
             return pd.DataFrame()
         return FramePerfAccessor.get_files_cache(self)
+
+    def get_callchain_index(self) -> dict:
+        """获取 {callchain_id: [record_dict, ...]} 索引（带缓存）。
+
+        替代对 callchain DataFrame 反复做 ``df[df['callchain_id']==cid]`` 全表布尔扫描。
+        record_dict 含 depth/file_id/symbol_id（按 depth 升序）。
+        """
+        if getattr(self, '_callchain_index_cache', None) is not None:
+            return self._callchain_index_cache
+        index: dict = {}
+        df = self.get_callchain_cache()
+        if df is not None and not df.empty:
+            cols = {
+                c: df.columns.get_loc(c) for c in ('callchain_id', 'depth', 'file_id', 'symbol_id') if c in df.columns
+            }
+            for row in df.itertuples(index=False, name=None):
+                cid = row[cols['callchain_id']]
+                index.setdefault(cid, []).append(
+                    {
+                        'depth': row[cols['depth']] if 'depth' in cols else 0,
+                        'file_id': row[cols['file_id']] if 'file_id' in cols else None,
+                        'symbol_id': row[cols['symbol_id']] if 'symbol_id' in cols else None,
+                    }
+                )
+            for cid in index:
+                index[cid].sort(key=lambda r: (r['depth'] if r['depth'] is not None else 0))
+        self._callchain_index_cache = index
+        return index
+
+    def get_files_index(self) -> dict:
+        """获取 {(file_id, serial_id): (symbol, path)} 索引（带缓存）。
+
+        替代对 files DataFrame 反复做 ``(file_id==)&(serial_id==)`` 全表布尔扫描。
+        """
+        if getattr(self, '_files_index_cache', None) is not None:
+            return self._files_index_cache
+        index: dict = {}
+        df = self.get_files_cache()
+        if df is not None and not df.empty:
+            cols = {c: df.columns.get_loc(c) for c in ('file_id', 'serial_id', 'symbol', 'path') if c in df.columns}
+            if 'file_id' in cols and 'serial_id' in cols:
+                for row in df.itertuples(index=False, name=None):
+                    key = (row[cols['file_id']], row[cols['serial_id']])
+                    symbol = row[cols['symbol']] if 'symbol' in cols else 'unknown'
+                    path = row[cols['path']] if 'path' in cols else 'unknown'
+                    if key not in index:  # 保留首次出现（与原 .iloc[0] 行为一致）
+                        index[key] = (symbol, path)
+        self._files_index_cache = index
+        return index
 
     @cached('_tid_to_info_cache', 'tid_to_info')
     def get_tid_to_info(self) -> dict:
@@ -1027,6 +1160,8 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
         self._perf_samples_cache = None
         self._callchain_cache = None
         self._files_cache = None
+        self._callchain_index_cache = None
+        self._files_index_cache = None
         self._process_cache = None
         self._pid_cache = None
         self._tid_cache = None

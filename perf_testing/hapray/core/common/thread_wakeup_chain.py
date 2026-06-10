@@ -22,6 +22,7 @@ import sqlite3
 import traceback
 from typing import Optional
 
+from hapray.core.common.frame.frame_core_cache_manager import ensure_perf_trace_indexes
 from hapray.core.common.frame.frame_core_load_calculator import calculate_thread_instructions
 from hapray.core.common.frame.frame_utils import is_system_thread
 from hapray.core.common.frame.frame_wakeup_chain import (
@@ -180,6 +181,93 @@ def _query_callchains_batch(
         return out
 
 
+def _build_instant_cache(trace_conn, range_start, range_end) -> dict:
+    """一次性把 instant 唤醒事件加载成 {itid: [(wakeup_from, ts), ...]}，供 find_wakeup_chain 走内存缓存。
+
+    覆盖 sched_wakeup 与 sched_waking 两类（与 find_wakeup_chain 的数据库回退分支一致）。
+    """
+    instant_cache: dict = {}
+    if not trace_conn:
+        return instant_cache
+    try:
+        cur = trace_conn.cursor()
+        cur.execute(
+            """
+            SELECT i.ref, i.wakeup_from, i.ts
+            FROM instant i
+            WHERE i.name IN ('sched_wakeup', 'sched_waking')
+            AND i.ref_type = 'itid'
+            AND i.wakeup_from IS NOT NULL
+            AND i.ref IS NOT NULL
+            AND i.ts >= ? AND i.ts <= ?
+            """,
+            (range_start, range_end),
+        )
+        rows = cur.fetchall()
+        for ref, wakeup_from, ts in rows:
+            instant_cache.setdefault(ref, []).append((wakeup_from, ts))
+        logger.info('[预加载] instant 表: %d 条唤醒事件，%d 个线程', len(rows), len(instant_cache))
+    except Exception as e:
+        logger.warning('预加载 instant 表失败，将回退到逐次查询: %s', e)
+    return instant_cache
+
+
+def _build_perf_sample_cache(perf_conn, range_start, range_end) -> tuple:
+    """一次性把 perf_sample 加载成 {thread_id: [(ts, event_count), ...]}（按 ts 排序），供二分查找聚合指令数。
+
+    Returns:
+        (perf_sample_cache, timestamp_field)；perf_conn 不可用时返回 (None, None)。
+    """
+    if not perf_conn:
+        return None, None
+    try:
+        cur = perf_conn.cursor()
+        cur.execute('PRAGMA table_info(perf_sample)')
+        cols = [r[1] for r in cur.fetchall()]
+        ts_col = 'timestamp_trace' if 'timestamp_trace' in cols else 'timeStamp'
+        cur.execute(
+            f"""
+            SELECT thread_id, {ts_col} AS ts, event_count
+            FROM perf_sample
+            WHERE {ts_col} >= ? AND {ts_col} <= ?
+            """,
+            (range_start, range_end),
+        )
+        cache: dict = {}
+        n = 0
+        for thread_id, ts, event_count in cur.fetchall():
+            cache.setdefault(thread_id, []).append((ts, event_count))
+            n += 1
+        for thread_id in cache:
+            cache[thread_id].sort(key=lambda x: x[0])
+        logger.info('[预加载] perf_sample 表: %d 条采样，%d 个线程 (ts 字段=%s)', n, len(cache), ts_col)
+        return cache, ts_col
+    except Exception as e:
+        logger.warning('预加载 perf_sample 表失败，将回退到逐次查询: %s', e)
+        return None, None
+
+
+def _build_tid_to_info_cache(trace_conn) -> dict:
+    """一次性加载 {tid: {'thread_name', 'process_name'}}，供区分应用/系统线程。"""
+    cache: dict = {}
+    if not trace_conn:
+        return cache
+    try:
+        cur = trace_conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT t.tid, t.name AS thread_name, p.name AS process_name
+            FROM thread t
+            INNER JOIN process p ON t.ipid = p.ipid
+            """
+        )
+        for tid, thread_name, process_name in cur.fetchall():
+            cache[tid] = {'thread_name': thread_name, 'process_name': process_name}
+    except Exception as e:
+        logger.warning('预加载 thread 信息失败: %s', e)
+    return cache
+
+
 def analyze_all_threads_wakeup_chain(
     trace_db_path: str,
     perf_db_path: str,
@@ -200,6 +288,10 @@ def analyze_all_threads_wakeup_chain(
             perf_conn = trace_conn
         if not _check_perf_sample_has_data(perf_conn):
             perf_conn = None
+        # 确保热点表索引存在（本函数独立开连接，与 FrameCacheManager 分开；索引落在 DB 文件上，幂等）
+        ensure_perf_trace_indexes(trace_conn)
+        if perf_conn is not None and perf_conn is not trace_conn:
+            ensure_perf_trace_indexes(perf_conn)
         cursor = trace_conn.cursor()
         range_start, range_end = None, None
         if time_range and len(time_range) >= 2:
@@ -247,13 +339,23 @@ def analyze_all_threads_wakeup_chain(
         pid_tid_to_perf_tid, pid_name_to_perf_tid, valid_perf_tids_by_pid = _build_perf_thread_id_map(
             perf_conn, list(app_pids)
         )
+
+        # 性能优化：在进入逐线程循环前，一次性预加载两张大表到内存缓存，
+        # 避免每个线程的唤醒链 BFS / 指令数计算都对未加索引的大表做全表扫描。
+        # （instant 表常达百万行，thread 数可达上百；不缓存时为 O(线程数 × BFS × 全表扫)。）
+        instant_cache = _build_instant_cache(trace_conn, range_start, range_end)
+        perf_sample_cache, perf_timestamp_field = _build_perf_sample_cache(perf_conn, range_start, range_end)
+        tid_to_info_cache = _build_tid_to_info_cache(trace_conn)
+
         results = []
         total_threads = len(app_threads)
         progress_interval = max(1, total_threads // 20)  # 约 20 次进度
         for idx, (itid, tid, thread_name, pid, _process_name) in enumerate(app_threads, 1):
             if idx == 1 or idx % progress_interval == 0 or idx == total_threads:
                 logger.info('唤醒链分析进度: %d/%d 线程', idx, total_threads)
-            related_itids_ordered = find_wakeup_chain(trace_conn, itid, range_start, range_end, app_pid=pid)
+            related_itids_ordered = find_wakeup_chain(
+                trace_conn, itid, range_start, range_end, app_pid=pid, instant_cache=instant_cache
+            )
             if not isinstance(related_itids_ordered, list):
                 related_itids_ordered = [(itid, 0)]
             related_itids = {i for i, _ in related_itids_ordered}
@@ -262,7 +364,14 @@ def analyze_all_threads_wakeup_chain(
             app_inst, sys_inst = {}, {}
             if perf_conn and perf_thread_ids:
                 app_inst, sys_inst = calculate_thread_instructions(
-                    perf_conn, trace_conn, perf_thread_ids, range_start, range_end, None, None, None
+                    perf_conn,
+                    trace_conn,
+                    perf_thread_ids,
+                    range_start,
+                    range_end,
+                    tid_to_info_cache,
+                    perf_sample_cache,
+                    perf_timestamp_field,
                 )
             thread_instructions = {}
             for i, _ in related_itids_ordered:
