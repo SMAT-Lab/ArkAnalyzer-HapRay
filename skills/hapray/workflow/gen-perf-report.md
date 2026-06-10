@@ -25,7 +25,7 @@
 
 > 必问话术以 **§0 必问模板** 为准。
 
-**update 示例（§0 已确认 SO 路径）**：
+**update 命令（符号恢复自动执行，禁止重复）**：
 
 ```bash
 uv run python -m scripts.main update \
@@ -33,6 +33,12 @@ uv run python -m scripts.main update \
   --so_dir "<§0_SO>" \
   --result-file <PROJECT_ROOT>/hapray-tool-result.json
 ```
+
+> **⚠️ 关键警告**：
+> - `update --so_dir` 会**自动触发完整符号恢复流程**（Step1导出 → Step2推断 → Step3导入 → Step4生成增强火焰图）
+> - **执行一次即可，等待完成，禁止重复执行**
+> - 如果超时进入后台，使用 `AwaitShell` 等待完成，**不要**手动再次执行 `symbol-recovery.exe`
+> - 重复执行会导致同一批函数被多次分析，浪费时间和资源
 
 ---
 
@@ -78,7 +84,14 @@ uv run python -m scripts.main update \
 | `symbol_recovery_replacements.json` | `hiperf/<step>/` |
 | `hiperf_report_with_inferred_symbols.html` | `hiperf/<step>/` **（火焰图最终交付）** |
 
-> 若增强火焰图不存在，或 `replacements.json` 含 `auto_recovered_*` → 见 **§3.5** 重跑。
+**验收流程**：
+1. `update --so_dir` 命令启动后，符号恢复自动在后台执行
+2. 使用 `AwaitShell` 等待任务完成（通常5-15分钟，热点函数多时可能更长）
+3. 检查上述4个产物是否存在
+4. ✅ 产物齐全 → 符号恢复完成，**禁止**再执行任何符号恢复相关命令
+5. ❌ 产物缺失 → 见 **§3.5** 重跑，**禁止**直接手动调用 `symbol-recovery.exe`
+
+> **🚨 禁止行为**：`update` 执行期间或完成后，**禁止**手动执行 `symbol-recovery.exe --step3-import` 或类似命令，这会导致重复分析。
 
 ### 3.5 符号恢复：默认 Agent；LLM 仅按需
 

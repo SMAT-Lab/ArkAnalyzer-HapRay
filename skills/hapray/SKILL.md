@@ -321,6 +321,11 @@ uv run python -m scripts.main update \
 # 二进制轨：用 <RUNTIME_ROOT>/.../perf-testing update -r ... --so_dir ...
 ```
 
+> **⚠️ 关键警告**：`update --so_dir` 会**自动触发完整符号恢复流程**（导出→推断→导入→生成增强火焰图），耗时5-15分钟。
+> - **执行一次即可**，使用 `AwaitShell` 等待完成
+> - **禁止**在 `update` 执行期间或完成后，手动再次执行 `symbol-recovery.exe`
+> - 产物验收：`hiperf_report_with_inferred_symbols.html` 存在即表示完成
+
 ### 阶段 4 analysis high-load（读 `report/`，**默认不跑 update**）
 
 ```bash
@@ -371,6 +376,7 @@ uv run python -m scripts.main update --report_dir ./reports/<timestamp> [--so_di
 - 用例只写在 Release 包 `_internal/` 或 `<REPO_ROOT>` 而不落盘 `<PROJECT_ROOT>/testcases/`  
 - 无预设时默认 gui-agent / `perf --manual`  
 - **未提符号恢复却默认跑 `update`**（perf 后应先读 `report/` 做高负载分析）；**把 root-cause 绑死在 `update` 上**（应走独立 `root-cause` CLI + Agent 全面根因）  
+- **符号恢复重复执行**：`update --so_dir` 已自动触发完整符号恢复，**禁止**再手动执行 `symbol-recovery.exe`（使用 `AwaitShell` 等待完成即可）  
 - 符号恢复确需执行时无故 `--symbol-recovery-no-llm`；伪交付 / 虚构数据  
 
 ---

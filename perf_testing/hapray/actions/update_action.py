@@ -629,28 +629,8 @@ class UpdateAction:
 
         user_app_src = resolve_user_app_packages_source(parsed_args.app_packages_dir)
         if user_app_src:
-            logging.info('User app-packages directory (skip device HAP pull): %s', user_app_src)
-        pkgs_by_bundle, app_pkg_source = prepare_app_packages_for_report(
-            report_dir,
-            bundle_names,
-            user_app_src,
-            device_downloader=UpdateAction._download_app_package_for_bundle,
-        )
-        if pkgs_by_bundle:
-            logging.info(
-                'App packages ready for %d bundle(s) (source=%s): %s',
-                len(pkgs_by_bundle),
-                app_pkg_source,
-                ', '.join(sorted(pkgs_by_bundle)),
-            )
-        elif bundle_names and not parsed_args.no_root_cause:
-            logging.warning(
-                'No HAP/app packages available (user path missing/invalid and device pull failed). '
-                'Provide --app-packages-dir or HAPRAY_APP_PACKAGES_DIR, or connect device with hdc. '
-                'Integrated root-cause will be skipped for this run.'
-            )
-        Config.set('app_packages_source', app_pkg_source)
-        Config.set('app_packages_by_bundle', {k: str(v) for k, v in pkgs_by_bundle.items()})
+            logging.info('User app-packages directory resolved: %s', user_app_src)
+        Config.set('app_packages_user_source', str(user_app_src) if user_app_src else '')
 
         effective_so, so_source = resolve_effective_so_dir(parsed_args.so_dir)
         if effective_so:
@@ -735,10 +715,8 @@ class UpdateAction:
         root_cause_enabled = not parsed_args.no_root_cause and not UpdateAction._parse_bool_env(
             'HAPRAY_UPDATE_NO_ROOT_CAUSE', default=False
         )
-        if root_cause_enabled and bundle_names and app_pkg_source == 'none':
-            logging.warning(
-                'Disabling integrated root-cause: no HAP/app packages (see --app-packages-dir / device pull).'
-            )
+        if root_cause_enabled and not bundle_names:
+            logging.info('Root-cause disabled: no bundle names found in testInfo.json')
             root_cause_enabled = False
         Config.set('root_cause_enabled', root_cause_enabled)
         Config.set('root_cause_skip_llm', bool(parsed_args.root_cause_skip_llm))
@@ -1642,6 +1620,31 @@ class UpdateAction:
             logging.info('=' * 80)
             logging.info('Starting root-cause analysis for all test cases')
             logging.info('=' * 80)
+
+            # HAP packages are only needed for root-cause; prepare them on-demand here
+            bundle_names_rc = UpdateAction._collect_bundle_names(testcase_dirs)
+            user_app_src_path = Config.get('app_packages_user_source', '') or None
+            user_app_src_rc = Path(user_app_src_path) if user_app_src_path else None
+            pkgs_by_bundle, app_pkg_source = prepare_app_packages_for_report(
+                report_dir,
+                bundle_names_rc,
+                user_app_src_rc,
+                device_downloader=UpdateAction._download_app_package_for_bundle,
+            )
+            if pkgs_by_bundle:
+                logging.info(
+                    'App packages ready for root-cause: %d bundle(s) (source=%s): %s',
+                    len(pkgs_by_bundle),
+                    app_pkg_source,
+                    ', '.join(sorted(pkgs_by_bundle)),
+                )
+            elif bundle_names_rc:
+                logging.warning(
+                    'No HAP/app packages available (user path missing/invalid and device pull failed). '
+                    'Provide --app-packages-dir or HAPRAY_APP_PACKAGES_DIR, or connect device with hdc. '
+                    'Root-cause will be skipped.'
+                )
+
             skip_rc_llm = bool(Config.get('root_cause_skip_llm', False))
             for case_dir in testcase_dirs:
                 bundle = UpdateAction._read_bundle_name_from_testinfo(case_dir)
