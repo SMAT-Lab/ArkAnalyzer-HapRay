@@ -191,7 +191,31 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | `PATH_PROMPT` | Shell |
 | `SKILL_READ` | Shell |
 | `DISCOVER` | perf（环境未就绪） |
+| `SCRIPT_AUTHORING` | 一次性写完全部步骤；写下一步操作前未验证上一步 |
 | `EXECUTE` / `PARSE` / `ANALYZE` / `REPORT` | — |
+
+### 脚本编写门禁（阶段 2 自写用例时强制）
+
+自写 `PerfLoad_*` 时，引入 `step_verified` 门禁变量，**结构性强制逐步验证**：
+
+| 变量 | 默认 | 设为 true 的条件 |
+|------|------|------------------|
+| `step_verified[N]` | `false` | 第 N 步操作已在设备上执行，且 Agent 输出了**验证证据**（Inspector dump / 截图 / 真机观察结论） |
+
+| 状态 | 允许 | 禁止 |
+|------|------|------|
+| `step_verified[N]=false` | 在设备上执行第 N 步操作并采集验证证据 | 写第 N+1 步操作；落盘含第 N+1 步的脚本文件 |
+| `step_verified[N]=true` | 写第 N+1 步操作代码 | — |
+
+**执行规则**：
+1. 每写一步 UI 操作，**必须先在设备上执行该操作**（`hdc shell` / `uitest dumpLayout` / 截图等），采集验证证据
+2. Agent 在对话中输出验证结论（如「截图确认全屏播放器已打开，封面图和控制按钮可见」），此时 `step_verified[N]` 设为 `true`
+3. 只有 `step_verified[N]=true` 后，才能写第 N+1 步操作代码
+4. 若验证失败（操作未生效），必须**立即修正**该步参数并重新验证，禁止跳过
+5. 所有步骤验证通过后，才能落盘完整脚本文件并执行 `prepare`
+6. `prepare` 是最终完整性验证，**不是**首次验证操作是否生效的环节
+
+**⚠️ 禁止**：一次性写完全部步骤后再验证；凭源码猜测坐标/手势参数不经设备验证就落盘脚本
 
 ---
 
@@ -380,7 +404,7 @@ uv run python -m scripts.main update --report_dir ./reports/<timestamp> [--so_di
 - **符号恢复重复执行**：`update --so_dir` 已自动触发完整符号恢复，**禁止**再手动执行 `symbol-recovery.exe`（使用 `AwaitShell` 等待完成即可）  
 - 符号恢复确需执行时无故 `--symbol-recovery-no-llm`；伪交付 / 虚构数据  
 - **`perf` 已成功产出 `report/summary.json` 后重复执行 `perf`**（须先检查已有报告是否存在，存在则直接进阶段4，禁止重跑）
-- **脚本步骤不验证操作是否生效**：关键 UI 操作（展开播放器、切换页面、弹出面板等）发完指令就继续，不验证目标界面是否真正出现；**必须在 `prepare` 阶段逐步验证**，未生效则修正脚本，禁止带缺陷脚本进入 `perf`
+- **脚本步骤不验证操作是否生效（`step_verified` 门禁违反）**：关键 UI 操作（展开播放器、切换页面、弹出面板等）发完指令就继续，不验证目标界面是否真正出现；**必须遵循 `step_verified` 门禁**（见状态机），写一步 → 设备上执行一步 → 输出验证证据 → `step_verified[N]=true` → 才能写下一步；**⛔ 一次性写完全部步骤后再验证，等价于 `path_prompt_done=false` 时执行 Shell**；未生效则立即修正，禁止带缺陷脚本进入 `prepare`
 
 ---
 

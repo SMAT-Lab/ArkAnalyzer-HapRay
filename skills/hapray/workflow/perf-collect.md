@@ -59,7 +59,9 @@
 
 ```text
 确认包名与场景 → [有应用源码? 分析源码定步骤 : 收集 UI 依据]
-  → UI 坐标映射探测（§7.1.5）→ 编写 PerfLoad_*（process 首步 start_app → 应用内步骤 → 依赖 teardown 退出）
+  → UI 坐标映射探测（§7.1.5）
+  → 逐步编写 PerfLoad_*（每步循环：写操作 → 设备执行 → 验证证据 → step_verified → 下一步）
+  → 所有 step_verified=true → 落盘完整脚本
   → prepare 完整试跑（失败则改脚本再 prepare）→ 通过 → perf → 读 report/ 高负载分析
 ```
 
@@ -165,12 +167,13 @@ def _tap_bounds_center(self, bounds_str: str, wait_seconds: float = 2):
   - **结束由 `teardown()` 退出**：勿在业务末步再写 `stop_app`；框架会在用例结束时退出应用。  
   - **勿做冷启动专测**：除非用户明确要求，禁止 `reboot_device`、步骤名「冷启动」、仅采冷启一条路径。  
 - 控件操作：**先按 §7.1.5 的 `ui_mapping_mode` 选型**——`coordinate-only` → 仅 `touch_by_coordinates`（+ `source_screen_*`）；`id`/`text` 模式才用 `touch_by_id` / `touch_by_text`；有源码时文案/路由仍须与源码或 Inspector 一致。
-- **步骤操作验证（MUST，自写脚本核心要求）**：脚本中每个 UI 操作（点击、滑动、手势等）**不能假设一定生效**。对于改变界面状态的关键操作（如：展开播放器、切换 Tab、弹出面板），**必须在脚本中验证操作结果**，而非发完指令就继续。验证方式：
-  - **dump Inspector 快照**：操作后 `uitest dumpLayout`，解析 JSON 确认目标 UI 元素是否出现（如播放器页面的封面图、控制按钮）
-  - **AppStorage / 属性断言**（若框架支持）
-  - **截图对比**：操作前后截图，确认界面发生了预期变化
-  - 至少在 `prepare` 试跑阶段做一次完整验证；若操作未生效，**必须修正坐标/手势参数后重跑 `prepare`**，禁止跳过验证就进入 `perf`
-  - **典型反例（禁止）**：swipe 上拉手势假设「全屏播放器已打开」，但实际手势速度/距离不够导致没打开，脚本却继续在错误界面上执行后续点击
+- **逐步验证硬门禁（SKILL.md 状态机强制）**：自写脚本时，每步 UI 操作必须遵循 `step_verified` 门禁（见 SKILL.md 状态机）。**结构性规则**：
+  - **写一步 → 执行一步 → 输出验证证据 → 确认生效 → 才能写下一步**。这不是建议，是硬门禁。
+  - 验证证据必须输出到对话中（Inspector dump 结果、截图描述、真机观察结论），作为 `step_verified[N]=true` 的依据。
+  - 验证失败时必须**立即修正**该步参数并重新验证，禁止跳过继续写下一步。
+  - 所有步骤验证通过后，才能落盘完整脚本文件。
+  - **`prepare` 是最终完整性验证，不是首次验证操作是否生效的环节。**
+  - **⛔ 绝对禁止**：一次性写完全部步骤后再验证；凭源码猜测坐标/手势参数不经设备验证就落盘脚本。违反此条等价于 `path_prompt_done=false` 时执行 Shell。
 - **长等待须保持亮屏（MUST）**：perf 采集期间息屏会导致 trace/操作无效。脚本中凡 **单次 `time.sleep` / `driver.wait` ≥ 5 秒**，或 `execute_performance_step` 内连续等待较长时，须避免长时间黑屏：
   - 等待前调用：`self.driver.wake_up_display()`
   - 等待 **≥ 15 秒** 时：拆成多段 sleep（建议每 **≤ 10 秒** 一段），**每段前** `self.driver.wake_up_display()`，或封装为本用例内的 `_wait_keep_screen_on(seconds)`（内部循环 wake + sleep）
