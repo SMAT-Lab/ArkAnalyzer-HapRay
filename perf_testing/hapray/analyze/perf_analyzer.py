@@ -19,12 +19,12 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import zlib
 from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+
 from hapray.analyze import BaseAnalyzer
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.exe_utils import ExeUtils
@@ -36,13 +36,12 @@ from hapray.core.common.symbol_recovery_bridge import (
     probe_symbol_recovery_llm_runtime,
     resolve_symbol_recovery_root,
     run_symbol_recovery_agent_step2,
-    symbol_recovery_report_name,
     symbol_recovery_replaced_html_name,
+    symbol_recovery_report_name,
     symbol_recovery_should_run,
 )
 from hapray.core.config.config import Config
 from hapray.mode.mode import Mode
-
 
 _SR_EMBED_MARKER = b'<!-- hapray-symbol-recovery-embedded -->'
 
@@ -180,6 +179,25 @@ class PerfAnalyzer(BaseAnalyzer):
         ):
             return False
         top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
+        # update 接管符号恢复编排（UpdateAction._run_symbol_recovery_for_case）：
+        # 本路径只产出 ecol 负载拆解排序（load_decomposition_top_symbols.json）供其复用 --top-symbols-json，
+        # 跳过 SR 子进程与内嵌，避免一次 update 内对同一 step 重复执行符号恢复。
+        if bool(Config.get('symbol_recovery_managed_by_update', False)):
+            managed_output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+            managed_out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, managed_output_root)
+            try:
+                self._dump_load_decomposition_top_symbols(
+                    step_dir,
+                    perf_db_path,
+                    managed_out_dir,
+                    so_dir=so_dir or None,
+                    top_n=top_n,
+                )
+            except Exception as e:  # noqa: BLE001 - 排序口径产出失败不应阻断报告生成
+                logging.debug(
+                    'Deferred load-decomposition dump failed for %s/%s: %s', self.scene_dir, step_dir, e
+                )
+            return False
         # update 集成路径：导出 load_decomposition_top_symbols.json（ecol 等拆解）并 --top-symbols-json；
         # 不用 perf.db 单 SQL 冒充拆解口径。
         stat_method = 'event_count'
@@ -395,7 +413,9 @@ class PerfAnalyzer(BaseAnalyzer):
                             if self._is_system_symbol(symbol, file_path):
                                 continue
                             counts = fn.get('counts') or []
-                            self_cost = int(counts[1]) if isinstance(counts, list) and len(counts) > 1 and counts[1] else 0
+                            self_cost = (
+                                int(counts[1]) if isinstance(counts, list) and len(counts) > 1 and counts[1] else 0
+                            )
                             if self_cost <= 0:
                                 continue
                             key = f'{file_path}::{normalized_address}'
@@ -472,9 +492,7 @@ class PerfAnalyzer(BaseAnalyzer):
         )
         if any(fp.startswith(p) for p in system_prefixes):
             return True
-        if any(p in s for p in ('/system/', '/vendor/', '/apex/')):
-            return True
-        return False
+        return bool(any(p in s for p in ('/system/', '/vendor/', '/apex/')))
 
     def _extract_top_symbols_from_load_excel(self, *, so_dir: Optional[str], top_n: int) -> list[dict]:
         """优先从负载拆解导出的 ecol_load_perf_*.xlsx 提取 TopN 符号。"""
@@ -498,8 +516,7 @@ class PerfAnalyzer(BaseAnalyzer):
         load_candidates = [
             c
             for c in cols
-            if (('指令' in c) or ('instruction' in c.lower()))
-            and ('Total' not in c and 'total' not in c.lower())
+            if (('指令' in c) or ('instruction' in c.lower())) and ('Total' not in c and 'total' not in c.lower())
         ]
         if not load_candidates:
             return []
@@ -535,8 +552,7 @@ class PerfAnalyzer(BaseAnalyzer):
                 }
             agg[normalized_address]['event_count'] = int(agg[normalized_address]['event_count']) + event_count
             agg[normalized_address]['call_count'] = int(agg[normalized_address]['call_count']) + 1
-        ranked = sorted(agg.values(), key=lambda x: int(x.get('event_count') or 0), reverse=True)[:top_n]
-        return ranked
+        return sorted(agg.values(), key=lambda x: int(x.get('event_count') or 0), reverse=True)[:top_n]
 
     @staticmethod
     def _is_sys_sdk_row(row: pd.Series) -> bool:
@@ -559,9 +575,7 @@ class PerfAnalyzer(BaseAnalyzer):
             return False
         return False
 
-    def _run_agent_inference_for_symbol_recovery(
-        self, out_dir: Path, *, timeout_sec: Optional[float]
-    ) -> Optional[str]:
+    def _run_agent_inference_for_symbol_recovery(self, out_dir: Path, *, timeout_sec: Optional[float]) -> Optional[str]:
         """
         在同一次 update 内执行 Agent 推断，产出 external_results.json 并用于后续导入回填。
         """

@@ -13,10 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import base64
-import json
 import logging
-import os
 import random
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -192,15 +189,14 @@ class ExplorationStrategy:
         }
 
         if strategy_type == 'llm':
-            from hapray.haptest.llm_strategy import LLMStrategy
+            from hapray.haptest.llm_strategy import LLMStrategy  # noqa: PLC0415
+
             return LLMStrategy(target_depth=3)
 
         if strategy_type not in strategies:
             raise ValueError(f'Unknown strategy type: {strategy_type}')
 
         return strategies[strategy_type]
-
-
 
     def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """

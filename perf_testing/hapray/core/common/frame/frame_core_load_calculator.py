@@ -419,15 +419,13 @@ class FrameLoadCalculator:
                 return []
             cache_validate_time = time.time() - cache_validate_start
 
-            # 从缓存中获取callchain数据
+            # 从缓存中获取callchain数据（使用预建 dict 索引，替代 DataFrame 全表布尔扫描）
             callchain_lookup_start = time.time()
-            callchain_cache = self.cache_manager._callchain_cache
-            callchain_records = (
-                callchain_cache[callchain_cache['callchain_id'] == callchain_id]  # pylint: disable=protected-access
-            )
+            callchain_index = self.cache_manager.get_callchain_index() if self.cache_manager else {}
+            callchain_records = callchain_index.get(callchain_id, [])
             callchain_lookup_time = time.time() - callchain_lookup_start
 
-            if callchain_records.empty:
+            if not callchain_records:
                 total_time = time.time() - callchain_start_time
                 if total_time > CALLCHAIN_ANALYSIS_TIME_THRESHOLD:  # 只记录耗时超过阈值的调用链分析
                     logging.debug(
@@ -444,27 +442,23 @@ class FrameLoadCalculator:
             build_start = time.time()
             callchain_info = []
             file_lookup_total = 0
+            files_index = self.cache_manager.get_files_index() if self.cache_manager else {}
 
-            for _, record in callchain_records.iterrows():
-                # 从缓存中获取文件信息
+            for record in callchain_records:
+                # 从缓存中获取文件信息（dict O(1) 查找，替代 (file_id==)&(serial_id==) 全表布尔扫描）
                 file_start = time.time()
-                files_cache = self.cache_manager._files_cache
-                file_mask = (files_cache['file_id'] == record['file_id']) & (
-                    files_cache['serial_id'] == record['symbol_id']
-                )
-                file_info = files_cache[file_mask]  # pylint: disable=protected-access
+                file_id = record['file_id']
+                symbol_id = record['symbol_id']
+                symbol, path = files_index.get((file_id, symbol_id), ('unknown', 'unknown'))
                 file_time = time.time() - file_start
                 file_lookup_total += file_time
-
-                symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
-                path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
 
                 callchain_info.append(
                     {
                         'depth': int(record['depth']),
-                        'file_id': int(record['file_id']),
+                        'file_id': int(file_id),
                         'path': str(path),
-                        'symbol_id': int(record['symbol_id']),
+                        'symbol_id': int(symbol_id),
                         'symbol': str(symbol),
                     }
                 )
@@ -995,9 +989,18 @@ class FrameLoadCalculator:
         for thread_id, ts, event_count in perf_cursor.fetchall():
             perf_samples_by_thread[thread_id].append((ts, event_count))
 
-        # 对每个线程的样本按时间戳排序（用于后续二分查找）
-        for thread_id in perf_samples_by_thread:
-            perf_samples_by_thread[thread_id].sort(key=lambda x: x[0])
+        # 性能优化：在帧循环之前，对每个线程一次性预建「排序时间戳数组 + event_count 前缀和」。
+        # 之前的实现对每个 (帧 × pid × 线程) 都重建 timestamps 列表并用 sum(range) 求区间和，
+        # 复杂度 O(帧数 × 线程数 × 样本数)。改为预建后，每帧每线程仅需两次二分 + 一次前缀和相减（O(1)）。
+        # 计算结果完全等价（同样是时间范围内 event_count 之和），无任何精度损失。
+        thread_ts_index: dict[int, tuple[list, list]] = {}
+        for thread_id, samples in perf_samples_by_thread.items():
+            samples.sort(key=lambda x: x[0])
+            timestamps = [s[0] for s in samples]
+            prefix = [0] * (len(samples) + 1)
+            for k, (_ts, ec) in enumerate(samples):
+                prefix[k + 1] = prefix[k] + ec
+            thread_ts_index[thread_id] = (timestamps, prefix)
 
         # 步骤6：对每个帧计算负载（在内存中分组计算）
         frame_loads = []
@@ -1014,21 +1017,15 @@ class FrameLoadCalculator:
 
                 # 计算该进程所有线程的负载
                 for thread_id in pid_thread_tids:
-                    if thread_id not in perf_samples_by_thread:
+                    idx = thread_ts_index.get(thread_id)
+                    if not idx:
                         continue
 
-                    # 使用二分查找找到时间范围内的样本
-                    samples = perf_samples_by_thread[thread_id]
-                    if not samples:
-                        continue
-
-                    timestamps = [s[0] for s in samples]
+                    # 使用二分查找定位时间范围，前缀和 O(1) 求区间内 event_count 之和
+                    timestamps, prefix = idx
                     start_idx = bisect.bisect_left(timestamps, frame_start)
                     end_idx = bisect.bisect_right(timestamps, frame_end)
-
-                    # 累加该线程在时间范围内的event_count
-                    thread_load = sum(samples[j][1] for j in range(start_idx, end_idx))
-                    total_load += thread_load
+                    total_load += prefix[end_idx] - prefix[start_idx]
 
             # 构建帧负载数据
             # 处理thread_name和callstack_id的NaN值

@@ -35,10 +35,10 @@ class PerfLoad_taobao_0080(PerfTestCase):
             self.driver.touch(BY.text('闪购'))
             self.driver.wait(2)
             time.sleep(2)
-             # 更换定位
+            # 更换定位
             self.driver.touch(self.convert_coordinate(125, 406))
             time.sleep(2)
-            #self.driver.touch(BY.text('西安半导体产业园E2栋'))
+            # self.driver.touch(BY.text('西安半导体产业园E2栋'))
             self.driver.touch(self.convert_coordinate(390, 729))
             self.driver.wait(2)
             # Step('关注页，上滑5次')
@@ -57,7 +57,7 @@ class PerfLoad_taobao_0080(PerfTestCase):
             self.driver.wait(2)
             self.driver.touch(self.convert_coordinate(962, 177))
             self.driver.wait(2)
-            #self.driver.touch(BY.text('搜索'))
+            # self.driver.touch(BY.text('搜索'))
             time.sleep(2)
             # 点击第一家店铺
             self.driver.touch(self.convert_coordinate(390, 660))
@@ -68,7 +68,7 @@ class PerfLoad_taobao_0080(PerfTestCase):
             # time.sleep(2)
             search_coords = self.convert_coordinate(475, 198)
             self.driver.input_text(search_coords, '黄金SPA鸡排堡1人大满足')
-            #self.driver.touch(BY.text('搜索'))
+            # self.driver.touch(BY.text('搜索'))
             self.driver.touch(self.convert_coordinate(873, 154))
             time.sleep(2)
 
@@ -83,7 +83,7 @@ class PerfLoad_taobao_0080(PerfTestCase):
             # time.sleep(1)
             # self.driver.touch(BY.text('加入购物车'))
             # time.sleep(2)
-            #self.driver.touch(BY.text('去结算'))
+            # self.driver.touch(BY.text('去结算'))
             self.driver.touch(self.convert_coordinate(904, 2236))
             time.sleep(3)
             # self.driver.touch(BY.text('提交订单'))
@@ -98,7 +98,7 @@ class PerfLoad_taobao_0080(PerfTestCase):
             # 放弃
             self.driver.touch(self.convert_coordinate(346, 1300))
             time.sleep(3)
-            #self.driver.touch(BY.text('取消订单'))
+            # self.driver.touch(BY.text('取消订单'))
             self.driver.touch(self.convert_coordinate(880, 873))
             time.sleep(3)
             # self.driver.touch(BY.text('仍要取消'))

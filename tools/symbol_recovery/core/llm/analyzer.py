@@ -332,8 +332,13 @@ class LLMFunctionAnalyzer:
                 # 缓存命中时仍附上 prompt，供 prompts_json 捕获
                 if '_prompt' not in cached_result:
                     cached_result['_prompt'] = self._build_prompt(
-                        instructions, strings, symbol_name, called_functions,
-                        offset, context, so_file=so_file,
+                        instructions,
+                        strings,
+                        symbol_name,
+                        called_functions,
+                        offset,
+                        context,
+                        so_file=so_file,
                         open_source_lib=self.open_source_lib,
                     )
                 return cached_result

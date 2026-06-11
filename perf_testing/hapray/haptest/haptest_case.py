@@ -164,7 +164,7 @@ class HapTest(PerfTestCase):
             ui_state = self._execute_ui_capture()
 
             # 添加状态到管理器
-            is_new_state = self.state_mgr.add_state(ui_state)
+            self.state_mgr.add_state(ui_state)
             # Log.info(f'UI状态: {"新状态" if is_new_state else "已访问"}')
             Log.info(f'当前应用: {ui_state.current_bundle_name or "未知"}')
             Log.info(f'目标应用: {ui_state.app_package}')
@@ -205,10 +205,10 @@ class HapTest(PerfTestCase):
                     ui_state,
                     next_ui_state,
                     target,  # Pass target for visualization
-                    self.report_path  # Pass report_path for visualization
+                    self.report_path,  # Pass report_path for visualization
                 )
 
-        Log.info('\n' + '='*60)
+        Log.info('\n' + '=' * 60)
         Log.info('HapTest测试完成')
         Log.info('=' * 60)
         self._print_summary()
@@ -238,7 +238,7 @@ class HapTest(PerfTestCase):
             app_name=self.app_name,
             current_bundle_name=current_bundle_name,
         )
-    
+
     def _get_next_ui_state(self) -> UIState:
         """
         获取执行操作后的UI状态

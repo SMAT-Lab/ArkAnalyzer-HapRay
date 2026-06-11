@@ -40,6 +40,7 @@ def test_static_missing_input_writes_tool_result(tmp_path: Path):
         cwd=_perf_testing_root(),
         capture_output=True,
         text=True,
+        check=False,
     )
     assert r.returncode == 1
     assert result_file.is_file()

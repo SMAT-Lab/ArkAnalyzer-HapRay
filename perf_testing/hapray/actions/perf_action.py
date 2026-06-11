@@ -18,7 +18,6 @@ import logging
 import os
 import queue
 import re
-import shutil
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -35,6 +34,7 @@ from hapray.core.config.config import Config
 from hapray.core.dsl.dsl_test_runner import DSLTestRunner
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
+
 
 class DeviceManager:
     """Manages a pool of HarmonyOS devices for parallel execution"""

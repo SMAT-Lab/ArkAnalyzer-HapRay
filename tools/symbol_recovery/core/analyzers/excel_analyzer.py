@@ -6,6 +6,7 @@
 输出：分析结果的excel文件 + HTML报告
 """
 
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,7 +18,6 @@ from core.llm.initializer import init_llm_analyzer
 from core.utils import common as util
 from core.utils.config import (
     DEFAULT_BATCH_SIZE,
-
     EXCEL_ANALYSIS_PATTERN,
     EXCEL_REPORT_PATTERN,
     config,
@@ -380,9 +380,7 @@ class ExcelOffsetAnalyzer:
                     except Exception as e:
                         logger.warning('⚠️  LLM 分析失败: %s', e)
 
-                all_instructions = [
-                    f'{inst.address:x}: {inst.mnemonic} {inst.op_str}' for inst in instructions
-                ]
+                all_instructions = [f'{inst.address:x}: {inst.mnemonic} {inst.op_str}' for inst in instructions]
                 return {
                     'rank': rank,
                     'address': f'{Path(self.so_file).name}+0x{offset:x}',
@@ -516,7 +514,7 @@ class ExcelOffsetAnalyzer:
             so_name = Path(result['so_file']).name
             row = {
                 '排名': result['rank'],
-                '地址': f"{so_name}+{result['offset']}",
+                '地址': f'{so_name}+{result["offset"]}',
                 '偏移量': result['offset'],
                 'SO文件': result['so_file'],
                 '函数指令数': result['instruction_count'],
@@ -583,53 +581,54 @@ class ExcelOffsetAnalyzer:
         Returns:
             (results_json_path, prompts_json_path)
         """
-        import json as _json
-        from pathlib import Path as _Path
-
-        out = _Path(output_dir)
+        out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
 
         results_data = []
         prompts_data = []
 
         for r in results:
-            so_name = _Path(r['so_file']).name
+            so_name = Path(r['so_file']).name
 
-            results_data.append({
-                'rank': r.get('rank'),
-                'address': f"{so_name}+{r['offset']}",
-                'offset': r['offset'],
-                'so_file': so_name,
-                'instruction_count': r.get('instruction_count', 0),
-                'inferred_name': r.get('function_name', ''),
-                'description': r.get('function_description', ''),
-                'performance_analysis': r.get('performance_analysis', ''),
-                'confidence': r.get('confidence', ''),
-                'strings': r.get('_strings') or [],
-            })
+            results_data.append(
+                {
+                    'rank': r.get('rank'),
+                    'address': f'{so_name}+{r["offset"]}',
+                    'offset': r['offset'],
+                    'so_file': so_name,
+                    'instruction_count': r.get('instruction_count', 0),
+                    'inferred_name': r.get('function_name', ''),
+                    'description': r.get('function_description', ''),
+                    'performance_analysis': r.get('performance_analysis', ''),
+                    'confidence': r.get('confidence', ''),
+                    'strings': r.get('_strings') or [],
+                }
+            )
 
-            prompts_data.append({
-                'rank': r.get('rank'),
-                'address': f"{so_name}+{r['offset']}",
-                'offset': r['offset'],
-                'so_file': so_name,
-                'instruction_count': r.get('instruction_count', 0),
-                'instructions': r.get('_all_instructions') or r.get('instructions') or [],
-                'decompiled': r.get('_decompiled', ''),
-                'strings': r.get('_strings') or [],
-                'context': r.get('_context', ''),
-                'prompt': r.get('_prompt', ''),
-            })
+            prompts_data.append(
+                {
+                    'rank': r.get('rank'),
+                    'address': f'{so_name}+{r["offset"]}',
+                    'offset': r['offset'],
+                    'so_file': so_name,
+                    'instruction_count': r.get('instruction_count', 0),
+                    'instructions': r.get('_all_instructions') or r.get('instructions') or [],
+                    'decompiled': r.get('_decompiled', ''),
+                    'strings': r.get('_strings') or [],
+                    'context': r.get('_context', ''),
+                    'prompt': r.get('_prompt', ''),
+                }
+            )
 
         results_path = out / 'symbol_recovery_results.json'
         prompts_path = out / 'symbol_recovery_prompts.json'
 
         results_path.write_text(
-            _json.dumps(results_data, ensure_ascii=False, indent=2),
+            json.dumps(results_data, ensure_ascii=False, indent=2),
             encoding='utf-8',
         )
         prompts_path.write_text(
-            _json.dumps(prompts_data, ensure_ascii=False, indent=2),
+            json.dumps(prompts_data, ensure_ascii=False, indent=2),
             encoding='utf-8',
         )
 

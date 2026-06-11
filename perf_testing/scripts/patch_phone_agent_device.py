@@ -94,8 +94,7 @@ def main() -> int:
 
     if _UNPATCHED_SNIPPET not in text:
         print(
-            'patch_phone_agent_device: upstream device.py does not match expected template; '
-            f'please review {device_py}',
+            f'patch_phone_agent_device: upstream device.py does not match expected template; please review {device_py}',
             file=sys.stderr,
         )
         return 1

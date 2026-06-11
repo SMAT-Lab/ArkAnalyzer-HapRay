@@ -10,13 +10,28 @@
 
 ### 1.1 必须加载的触发条件（满足任一条即强制）
 
+> **默认主线**：本文是 **阶段4 默认进入**的分析。`perf` 完成后**直接读 `<用例>/report/`**（**不依赖 `update`**：`more_flame_graph.json`、全部 `trace_*.json`、`summary.json`、`hiperf/step*/perf.db` 均为 perf 阶段产物）。**符号恢复（可选阶段3）非前置**——见下「无符号恢复时的降级」。
+
 | 类别 | 用户表述或客观信号 | 必须行为 |
 |------|--------------------|----------|
+| **默认进入** | `perf` 已产出 `report/`（无论是否提符号恢复） | 读 `report/` + `perf.db`，执行 §四 各维度聚合 |
 | **意图明确** | 含「深挖」「高负载挖掘」「LLM 挖掘」「CPU 指令数」「未知瓶颈」「报告没写」「还有没有别的问题」「弱信号」「动静交叉」等 | 全文流程 + §三 各维度逐项检索 |
 | **产物已齐** | `reports_path` 下同时存在 `perf.db`（或内嵌 `perf_sample` 的 `trace.db`）与 SO 静态分析产物（`opt`/`static` 输出、`symbol_recovery` 输出等） | 动静交叉；**禁止**只读 HTML 摘要 |
 | **产物部分齐** | 仅有 `perf.db`/`trace.db`（无静态产物），或仅有静态分析产物 | 最大化利用已有源，**显式写明**缺失的另一侧 |
 | **结论冲突** | 自动报告「正常/无异常」，但用户描述卡顿、发热、帧率低 | 必须从 `perf_sample` 找矛盾证据 |
 | **与 scroll-jank 同时需要** | 问题涉及滑动/掉帧，且同时关心 CPU 指令数 | **同时**加载 `scroll-jank` 与本文；帧结论只按 scroll-jank 规则，指令数分析按本文 |
+
+### 1.1.1 无符号恢复时的降级（默认流程）
+
+默认不跑符号恢复时，按以下规则处理符号维度，**不得伪造**：
+
+| 维度 | 无符号恢复时 |
+|------|-------------|
+| **SO 级热点**（§四.3.A） | **照常**：`perf_files.path` 即 SO 路径，聚合不受影响 |
+| **帧级 / 线程级 / IPC / 空刷**（§四.3.C-E、其余分析器产物） | **照常**：均不依赖符号名 |
+| **符号级热点**（§四.3.B） | 若 `perf_files.symbol` 为有效函数名 → 照常；若大量为 `[unknown]` / 十六进制地址 → **标注「该 SO 已 strip，建议触发可选阶段3 `update --so_dir` 符号恢复后重分析」**，**禁止**假装完成符号级分析 |
+
+触发符号恢复后再回到本文做符号级分析。符号恢复流程见 [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) 与 [`../workflow/gen-perf-report.md`](../workflow/gen-perf-report.md)。
 
 ### 1.2 最低完成标准（Agent 自检清单）
 
@@ -334,7 +349,19 @@ LIMIT 20;
 | [`../SKILL.md`](../SKILL.md) | CLI、契约、`gui-agent` 前置条件、独立 `.md` 命名与落盘规则 |
 | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | **帧与手势**的权威规则与 SQL；帧级指令数与帧结论须保持一致 |
 | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 当热点函数为 `[unknown]`/stripped 时**必须先执行**，再回到本文分析 |
-| [`../hapray-tool-result.md`](../hapray-tool-result.md) | 定位 `reports_path` 与契约字段 |
+| [`../schemas/hapray-tool-result.md`](../schemas/hapray-tool-result.md) | 定位 `reports_path` 与契约字段 |
+| [`../root-cause/comprehensive.md`](../root-cause/comprehensive.md) | 阶段5 根因分析；CLI 的 `signal_extractors` 会独立读取同一原始产物，Agent 做补充深挖时应**优先引用阶段4已挖出的线索**，避免重复 |
+
+### 与阶段5的分工
+
+| 维度 | 阶段4（本 Skill） | 阶段5 root-cause |
+|------|------------------|------------------|
+| 目标 | 发现线索与假设 | 确认根因 + 源码级定位 |
+| 手段 | Agent 手动 SQL + 数据探索 | CLI 自动多信号提取 + LLM/Agent 推断 |
+| 产出 | 高负载热点表 + 新发现 | `root_cause.md` + Agent 源码级补充 |
+| 数据源 | 同一原始产物（`report/`） | CLI 独立提取，不依赖阶段4产出 |
+
+**注意**：阶段5 CLI 的 `signal_extractors`（`CpuHotspotEvidenceExtractor` 等）与本 Skill 的 §四.3 SQL 查询覆盖类似的数据源，但分析深度和产出格式不同。本 Skill 侧重**人工发现与验证**，CLI 侧重**自动推断**。Agent 在阶段5做补充深挖时，应引用本阶段的发现而非从零重做。
 
 ---
 

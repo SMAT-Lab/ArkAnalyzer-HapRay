@@ -6,6 +6,7 @@
 """
 
 import gc
+import hashlib
 import json
 import sqlite3
 from collections import defaultdict
@@ -79,6 +80,9 @@ class EventCountAnalyzer:
         self.use_capstone_only = use_capstone_only
         self.skip_decompilation = skip_decompilation
         self._top_symbols_json = Path(top_symbols_json) if top_symbols_json else None
+        # 反汇编缓存落盘到显式 --output-dir（即 step 的 .symbol_recovery/<step>/），
+        # 保证 prompt-only 与 import 两次子进程读写同一路径、且不依赖 CWD/默认 output/。
+        self._step_output_dir = Path(output_dir) if output_dir else None
 
         if not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 不存在: {perf_db_file}')
@@ -436,6 +440,52 @@ class EventCountAnalyzer:
         df.to_excel(report_file, index=False)
         logger.info(f'[OK] Comparison report saved: {report_file}')
 
+    # ---- 反汇编结果磁盘缓存：prompt-only 与 import-llm-results 复用同一批 radare2 反汇编 ----
+    # 同一 step 的 prompt-only 与 import 两次子进程会对相同 TopN 地址各反汇编一遍（radare2 aa/af
+    # 在 stripped SO 上单地址可达 1~3 分钟）。这里按「地址集合 + top_n + so + capstone 标志」做内容键缓存，
+    # 第二次（import）命中即跳过 Step 4 的重复反汇编；地址或口径变化时键不同自动失效。
+    _DISASM_CACHE_FILE = '_event_count_disasm_cache.json'
+
+    def _disasm_cache_key(self, addresses: list, top_n: int) -> str:
+        payload = json.dumps(
+            {
+                'addresses': sorted(str(a) for a in addresses),
+                'top_n': int(top_n),
+                'so_dir': str(self.so_dir),
+                'capstone_only': bool(self.use_capstone_only),
+                'skip_decompilation': bool(self.skip_decompilation),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return hashlib.sha1(payload.encode('utf-8')).hexdigest()
+
+    def _load_disasm_cache(self, output_dir: Path, cache_key: str):
+        cache_file = Path(output_dir) / self._DISASM_CACHE_FILE
+        if not cache_file.is_file():
+            return None
+        try:
+            data = json.loads(cache_file.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError) as e:
+            logger.debug('反汇编缓存读取失败（忽略，将重新分析）: %s', e)
+            return None
+        if not isinstance(data, dict) or data.get('key') != cache_key:
+            return None
+        results = data.get('results')
+        if not isinstance(results, list) or not results:
+            return None
+        return results
+
+    def _save_disasm_cache(self, output_dir: Path, cache_key: str, analyzed_results: list) -> None:
+        cache_file = Path(output_dir) / self._DISASM_CACHE_FILE
+        try:
+            cache_file.write_text(
+                json.dumps({'key': cache_key, 'results': analyzed_results}, ensure_ascii=False),
+                encoding='utf-8',
+            )
+        except (OSError, TypeError, ValueError) as e:
+            logger.debug('反汇编缓存写入失败（忽略，不影响结果）: %s', e)
+
     def analyze_event_count_only(self, top_n=None):
         """只按 event_count 统计 topN，不进行对比"""
         if top_n is None:
@@ -487,7 +537,11 @@ class EventCountAnalyzer:
                         logger.info(f'Filtering by SO file: {target_so_name}')
 
                     event_count_top = self._get_event_count_top100(
-                        cursor, file_id_to_path, name_to_data, top_n, target_so_name,
+                        cursor,
+                        file_id_to_path,
+                        name_to_data,
+                        top_n,
+                        target_so_name,
                     )
                     logger.info(
                         f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n}, inclusive; '
@@ -610,6 +664,18 @@ class EventCountAnalyzer:
             # 获取输出目录
             output_dir = config.get_output_dir()
             config.ensure_output_dir(output_dir)
+            # 反汇编结果缓存命中（prompt-only 已分析过同批地址）→ 跳过重复的 radare2 反汇编
+            cache_dir = self._step_output_dir or output_dir
+            config.ensure_output_dir(cache_dir)
+            cache_key = self._disasm_cache_key([r['address'] for r in results], top_n)
+            cached_results = self._load_disasm_cache(cache_dir, cache_key)
+            if cached_results is not None:
+                logger.info(
+                    '♻️  命中反汇编缓存，跳过 Step 4 重复反汇编（%d 个函数）；'
+                    'import 仅做名称回填，无需重跑 radare2',
+                    len(cached_results),
+                )
+                return cached_results
             # 创建临时 Excel 文件用于分析（包含 event_count 列）
             # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，results 中应该只包含指定 SO 文件的地址
             temp_excel = output_dir / f'{TEMP_FILE_PREFIX}event_count.xlsx'
@@ -684,6 +750,9 @@ class EventCountAnalyzer:
             # 清理临时文件
             if temp_excel.exists():
                 temp_excel.unlink()
+
+            # 落盘反汇编缓存，供同 step 的 import-llm-results 子进程复用（跳过重复反汇编）
+            self._save_disasm_cache(cache_dir, cache_key, analyzed_results)
 
             return analyzed_results
 

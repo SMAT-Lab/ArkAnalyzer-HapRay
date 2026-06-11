@@ -1075,7 +1075,9 @@ def extract_event_counts_from_html(html_file: str) -> dict:
     # 解析压缩的 JSON 数据块
     match = re.search(r'<script id="record_data"[^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
     if not match:
-        match = re.search(r'<script[^>]*id=["\']record_bz_data["\'][^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
+        match = re.search(
+            r'<script[^>]*id=["\']record_bz_data["\'][^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE
+        )
     if not match:
         logger.warning('HTML 中未找到 record_data 数据块')
         return {}

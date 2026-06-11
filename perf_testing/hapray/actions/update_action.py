@@ -26,15 +26,27 @@ from typing import Optional
 
 from hapray import VERSION
 from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.device_app_packages import (
+    app_packages_ready_for_root_cause,
+    bundle_packages_dir,
+    download_app_packages_for_bundle,
+    prepare_app_packages_for_report,
+    resolve_user_app_packages_source,
+)
+from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
+from hapray.core.common.root_cause_integration import run_root_cause_for_case
 from hapray.core.common.symbol_recovery_bridge import (
     ENV_SO_DIR,
     ENV_SYMBOL_RECOVERY_EXE,
     ENV_SYMBOL_RECOVERY_PYTHON,
     ENV_SYMBOL_RECOVERY_ROOT,
+    apply_symbol_recovery_manifest_to_scene_outputs,
     check_symbol_recovery_llm_ready,
+    default_symbol_recovery_output_dir,
+    embed_symbol_recovery_report_into_hiperf_html,
     llm_env_ready_for_symbol_recovery,
-    maybe_run_symbol_recovery_for_step,
     maybe_generate_symbol_recovery_html_for_step,
+    maybe_run_symbol_recovery_for_step,
     parse_output_root_from_env,
     parse_stat_from_env,
     parse_top_n_from_env,
@@ -43,9 +55,11 @@ from hapray.core.common.symbol_recovery_bridge import (
     resolve_symbol_recovery_exe,
     resolve_symbol_recovery_python,
     resolve_symbol_recovery_root,
+    run_symbol_recovery_agent_step2,
+    symbol_recovery_replaced_html_name,
+    symbol_recovery_report_name,
     try_load_dotenv_for_llm,
 )
-from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
@@ -123,12 +137,22 @@ class UpdateAction:
 
     @staticmethod
     def _try_recv_remote_dir(remote_dir: str, local_dir: Path) -> bool:
+        local_dir = local_dir.resolve()
         local_dir.parent.mkdir(parents=True, exist_ok=True)
         ok, out = UpdateAction._run_hdc_cmd(['file', 'recv', remote_dir, str(local_dir)], timeout_sec=90)
         if not ok:
             logging.debug('hdc recv failed: %s -> %s (%s)', remote_dir, local_dir, out)
             return False
-        return UpdateAction._looks_like_downloaded_libs(local_dir)
+        return UpdateAction._looks_like_downloaded_libs(local_dir) or any(local_dir.rglob('*'))
+
+    @staticmethod
+    def _try_recv_remote_file(remote_file: str, local_file: Path) -> bool:
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        ok, out = UpdateAction._run_hdc_cmd(['file', 'recv', remote_file, str(local_file)], timeout_sec=120)
+        if not ok:
+            logging.debug('hdc recv file failed: %s -> %s (%s)', remote_file, local_file, out)
+            return False
+        return local_file.is_file() and local_file.stat().st_size > 0
 
     @staticmethod
     def _parse_json_from_shell_output(out: str) -> Optional[dict]:
@@ -293,8 +317,23 @@ class UpdateAction:
         return None
 
     @staticmethod
-    def _auto_prepare_so_dir(report_dir: str, testcase_dirs: list[str]) -> tuple[Optional[str], str]:
-        bundle_names = UpdateAction._collect_bundle_names(testcase_dirs)
+    def _download_app_package_for_bundle(bundle_name: str, report_dir: str) -> Optional[Path]:
+        """拉取 HAP 与安装目录树，供 root-cause 反编译/索引。"""
+        return download_app_packages_for_bundle(
+            bundle_name,
+            report_dir,
+            run_hdc_cmd=UpdateAction._run_hdc_cmd,
+            looks_like_libs=UpdateAction._looks_like_downloaded_libs,
+            try_recv_dir=UpdateAction._try_recv_remote_dir,
+            try_recv_file=UpdateAction._try_recv_remote_file,
+        )
+
+    @staticmethod
+    def _auto_download_so_libs_only(
+        report_dir: str,
+        bundle_names: list[str],
+    ) -> tuple[Optional[str], str]:
+        """仅从设备拉取 .so/libs（不拉 HAP；HAP 由 ``prepare_app_packages_for_report`` 单独处理）。"""
         if not bundle_names:
             return (None, 'no_bundle_name')
         if not UpdateAction._is_hdc_device_ready():
@@ -308,6 +347,11 @@ class UpdateAction:
             if got is not None:
                 resolved.append(got)
                 logging.info('Auto-downloaded libs for %s -> %s', bundle, got)
+                continue
+            pkg_dir = bundle_packages_dir(report_dir, bundle)
+            if (pkg_dir / 'bundle').is_dir():
+                resolved.append(pkg_dir / 'bundle')
+                logging.info('Using bundle tree as SO search root for %s -> %s', bundle, pkg_dir / 'bundle')
             else:
                 logging.warning('Failed to auto-download libs for bundle: %s', bundle)
         if not resolved:
@@ -339,7 +383,20 @@ class UpdateAction:
                 '不要填 perf-testing 的安装目录（如 dist）。'
             ),
         )
-        parser.add_argument('--so_dir', default=None, help='Directory for symbolicated .so files')
+        parser.add_argument(
+            '--so_dir',
+            default=None,
+            help='Directory containing app .so files for symbol recovery (skips device SO pull when set). Env: HAPRAY_SO_DIR',
+        )
+        parser.add_argument(
+            '--app-packages-dir',
+            default=None,
+            help=(
+                'Local root-cause input directory (skips device pull when set). '
+                'Auto-detects: decompiled/*.ts or src/main/ets → source analysis (with_source); '
+                '*.hap only → HAP decompile path. Env: HAPRAY_APP_PACKAGES_DIR'
+            ),
+        )
         parser.add_argument(
             '-v',
             '--version',
@@ -471,7 +528,19 @@ class UpdateAction:
             '--symbol-recovery-agent-mode',
             action='store_true',
             default=False,
-            help='Enable offline/agent symbol recovery orchestration mode when direct LLM is unavailable',
+            help=(
+                'Explicitly enable Agent symbol recovery (default on update; '
+                'use --symbol-recovery-llm-mode to prefer online LLM first)'
+            ),
+        )
+        parser.add_argument(
+            '--symbol-recovery-llm-mode',
+            action='store_true',
+            default=False,
+            help=(
+                'Prefer online LLM symbol recovery first (legacy path); '
+                'on failure falls back to Agent mode. Default update uses Agent only.'
+            ),
         )
         parser.add_argument(
             '--symbol-recovery-import-results',
@@ -483,6 +552,18 @@ class UpdateAction:
             default=None,
             help='SIMPLE mode: optional existing hiperf_report.html to extract perf.json from, '
             'bypassing perf -i for flame graph data preparation',
+        )
+        parser.add_argument(
+            '--no-root-cause',
+            action='store_true',
+            default=False,
+            help='Skip integrated empty-frame root-cause analysis after update',
+        )
+        parser.add_argument(
+            '--root-cause-skip-llm',
+            action='store_true',
+            default=False,
+            help='Root-cause: export evidence/agent task only (no local LLM API call)',
         )
         parsed_args = parser.parse_args(args)
 
@@ -545,29 +626,51 @@ class UpdateAction:
             UpdateAction._log_no_testcase_dirs_help(report_dir)
             return (1, '')
 
+        bundle_names = UpdateAction._collect_bundle_names(testcase_dirs)
+
+        user_app_src = resolve_user_app_packages_source(parsed_args.app_packages_dir)
+        if user_app_src:
+            logging.info('User app-packages directory resolved: %s', user_app_src)
+        Config.set('app_packages_user_source', str(user_app_src) if user_app_src else '')
+
         effective_so, so_source = resolve_effective_so_dir(parsed_args.so_dir)
-        if not effective_so:
-            auto_so, auto_source = UpdateAction._auto_prepare_so_dir(report_dir, testcase_dirs)
-            if auto_so:
-                effective_so = auto_so
-                so_source = auto_source
         if effective_so:
-            logging.info('Effective SO directory (%s): %s', so_source, effective_so)
+            logging.info('Using user SO directory (%s), skip device .so pull: %s', so_source, effective_so)
         elif parsed_args.so_dir or os.environ.get(ENV_SO_DIR, '').strip():
             logging.warning(
                 'SO directory was requested via CLI or %s but path is missing or not a directory',
                 ENV_SO_DIR,
             )
+        elif not bundle_names:
+            logging.info('No bundle name in testInfo.json; cannot auto-download .so from device')
+        else:
+            auto_so, auto_source = UpdateAction._auto_download_so_libs_only(report_dir, bundle_names)
+            if auto_so:
+                effective_so = auto_so
+                so_source = auto_source
+                logging.info('Effective SO directory from device (%s): %s', so_source, effective_so)
+            else:
+                logging.warning(
+                    'No .so directory available (user path not set and device pull failed). '
+                    'Provide --so_dir or HAPRAY_SO_DIR with local libs. Symbol recovery will be skipped.'
+                )
+        if effective_so:
+            logging.info('Effective SO directory (%s): %s', so_source, effective_so)
 
         # 每次 update 都显式刷新 so_dir，避免沿用同进程上一次执行遗留的值
         Config.set('so_dir', effective_so or '')
 
         llm_ready = check_symbol_recovery_llm_ready()
         llm_env_configured = llm_env_ready_for_symbol_recovery()
-        llm_probe_ok = True
+        use_llm_mode = bool(
+            parsed_args.symbol_recovery_llm_mode
+            or UpdateAction._parse_bool_env('HAPRAY_SYMBOL_RECOVERY_LLM_MODE', default=False)
+        )
         env_agent_mode = UpdateAction._parse_bool_env('HAPRAY_SYMBOL_RECOVERY_AGENT_MODE', default=False)
-        agent_mode = bool(parsed_args.symbol_recovery_agent_mode or env_agent_mode)
-        if llm_ready and not agent_mode:
+        # update 默认 Agent 模式；仅显式 --symbol-recovery-llm-mode / HAPRAY_SYMBOL_RECOVERY_LLM_MODE 时先走在线 LLM
+        agent_mode = bool(parsed_args.symbol_recovery_agent_mode or env_agent_mode or not use_llm_mode)
+        llm_probe_ok = True
+        if use_llm_mode and llm_ready and not agent_mode:
             sr_root_probe = resolve_symbol_recovery_root()
             runtime_ok, runtime_reason = probe_symbol_recovery_llm_runtime(sr_root_probe, timeout_sec=5)
             llm_probe_ok = runtime_ok
@@ -578,11 +681,13 @@ class UpdateAction:
                 )
                 llm_ready = False
                 agent_mode = True
-        if not parsed_args.symbol_recovery_no_llm and effective_so and not llm_ready and not agent_mode:
+        elif use_llm_mode and not llm_ready:
             agent_mode = True
+            logging.info('已请求 LLM 模式但未配置可用 LLM（缺少 API/base URL），本 run 改用 Agent 模式完成符号恢复。')
+        elif not use_llm_mode and not parsed_args.symbol_recovery_no_llm and effective_so:
             logging.info(
-                '未配置可用 LLM（缺少 API/base URL 或探测未通过），自动启用符号恢复 Agent 模式：'
-                '将导出任务后由内联 step2、环境命令或手动导入结果完成推断。'
+                '符号恢复默认使用 Agent 模式（导出任务 + step2/环境命令推断）；'
+                '若需先走在线 LLM，请加 --symbol-recovery-llm-mode 或设置 HAPRAY_SYMBOL_RECOVERY_LLM_MODE=1。'
             )
         top_n = parse_top_n_from_env(parsed_args.symbol_recovery_top_n)
         stat_method = parse_stat_from_env(parsed_args.symbol_recovery_stat)
@@ -597,12 +702,25 @@ class UpdateAction:
         Config.set('symbol_recovery_output_root', output_root or '')
         Config.set('symbol_recovery_context', (parsed_args.symbol_recovery_context or '').strip())
         Config.set('symbol_recovery_no_llm', bool(parsed_args.symbol_recovery_no_llm))
+        Config.set('symbol_recovery_use_llm_mode', use_llm_mode)
         Config.set('symbol_recovery_agent_mode', agent_mode)
+        # update 自带专门的符号恢复编排（process_reports → _run_symbol_recovery_for_case）。
+        # 置位后，report 重生成阶段的 PerfAnalyzer 内嵌符号恢复只产出负载拆解排序、跳过 SR 执行，
+        # 避免一次 update 内对同一 step 重复跑符号恢复（见 perf_analyzer._maybe_apply_symbol_recovery）。
+        Config.set('symbol_recovery_managed_by_update', True)
         Config.set('symbol_recovery_import_results', (parsed_args.symbol_recovery_import_results or '').strip())
         Config.set(
             'symbol_recovery_timeout',
             parsed_args.symbol_recovery_timeout if parsed_args.symbol_recovery_timeout is not None else 0,
         )
+        root_cause_enabled = not parsed_args.no_root_cause and not UpdateAction._parse_bool_env(
+            'HAPRAY_UPDATE_NO_ROOT_CAUSE', default=False
+        )
+        if root_cause_enabled and not bundle_names:
+            logging.info('Root-cause disabled: no bundle names found in testInfo.json')
+            root_cause_enabled = False
+        Config.set('root_cause_enabled', root_cause_enabled)
+        Config.set('root_cause_skip_llm', bool(parsed_args.root_cause_skip_llm))
         if not parsed_args.symbol_recovery_no_llm:
             if (llm_ready or agent_mode) and effective_so:
                 sr_root = resolve_symbol_recovery_root()
@@ -828,10 +946,7 @@ class UpdateAction:
             return False
 
         # 功能描述不能是默认值
-        if not functionality or str(functionality) in ('未知', 'null', 'None', ''):
-            return False
-
-        return True
+        return not (not functionality or str(functionality) in ('未知', 'null', 'None', ''))
 
     @staticmethod
     def _cleanup_symbol_recovery_error_outputs(
@@ -893,12 +1008,15 @@ class UpdateAction:
 
                             if valid_count == 0:
                                 should_delete = True
-                                invalid_reason = 'all results are invalid (null function names or unknown functionality)'
+                                invalid_reason = (
+                                    'all results are invalid (null function names or unknown functionality)'
+                                )
                             elif valid_count < len(data):
                                 # 部分无效，记录日志但仍保留（由后续处理决定）
                                 logging.debug(
                                     'Results JSON has %d/%d valid entries, keeping for partial recovery',
-                                    valid_count, len(data)
+                                    valid_count,
+                                    len(data),
                                 )
 
                     else:
@@ -941,7 +1059,9 @@ class UpdateAction:
                     # 如果包含占位符或所有 function_name 都是 null，删除
                     if has_placeholder or (isinstance(data, list) and len(data) > 0 and all_null):
                         should_delete = True
-                        logging.info('Cleaned up error external results JSON with placeholders: %s', external_results_json)
+                        logging.info(
+                            'Cleaned up error external results JSON with placeholders: %s', external_results_json
+                        )
 
                 except (json.JSONDecodeError, OSError):
                     should_delete = True
@@ -983,6 +1103,313 @@ class UpdateAction:
             return False
 
     @staticmethod
+    def _iter_symbol_recovery_steps(case_dir: str):
+        """枚举用例下含 perf.db 的 step（支持 ``hiperf/stepN`` 与 ``stepN/hiperf`` 两种布局）。"""
+        case_path = Path(case_dir)
+        hiperf_root = case_path / 'hiperf'
+        if hiperf_root.is_dir():
+            for step_hiperf in sorted(hiperf_root.glob('step*/')):
+                if not step_hiperf.is_dir():
+                    continue
+                perf_db = step_hiperf / 'perf.db'
+                if perf_db.is_file():
+                    yield step_hiperf.name, step_hiperf, perf_db
+            return
+        for step_dir in sorted(case_path.iterdir()):
+            if not step_dir.is_dir() or not step_dir.name.startswith('step'):
+                continue
+            hiperf_dir = step_dir / 'hiperf'
+            perf_db = hiperf_dir / 'perf.db'
+            if hiperf_dir.is_dir() and perf_db.is_file():
+                yield step_dir.name, hiperf_dir, perf_db
+
+    @staticmethod
+    def _embed_symbol_recovery_into_hiperf_html(
+        case_dir: str,
+        step_name: str,
+        *,
+        top_n: int,
+        stat_method: str,
+        generated_html: Optional[Path],
+    ) -> bool:
+        """将增强火焰图或符号恢复分析报告嵌入单步 ``hiperf_report.html``（iframe）。"""
+        step_hiperf = Path(case_dir) / 'hiperf' / step_name
+        hiperf_report = step_hiperf / 'hiperf_report.html'
+        if not hiperf_report.is_file():
+            logging.warning('Cannot embed symbol recovery: missing %s', hiperf_report)
+            return False
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        out_dir = default_symbol_recovery_output_dir(case_dir, step_name, output_root)
+        enhanced = generated_html or (step_hiperf / symbol_recovery_replaced_html_name(hiperf_report.name))
+        if Config.get('mode') == Mode.COMMUNITY:
+            detail = enhanced if enhanced.is_file() else out_dir / symbol_recovery_report_name(stat_method, top_n)
+        else:
+            detail = out_dir / symbol_recovery_report_name(stat_method, top_n)
+            if not detail.is_file() and enhanced.is_file():
+                logging.info(
+                    'SIMPLE mode: standalone analysis report missing, skip iframe embed '
+                    '(enhanced flame graph %s is used in composite report)',
+                    enhanced,
+                )
+                return True
+        if not detail.is_file():
+            logging.warning('Symbol recovery detail html not found for embed: %s', detail)
+            return False
+        return embed_symbol_recovery_report_into_hiperf_html(hiperf_report, detail)
+
+    @staticmethod
+    def _symbol_recovery_timeout_sec() -> Optional[float]:
+        timeout_raw = Config.get('symbol_recovery_timeout', 0)
+        try:
+            tval = float(timeout_raw) if timeout_raw else 0.0
+        except (TypeError, ValueError):
+            tval = 0.0
+        return tval if tval > 0 else None
+
+    @staticmethod
+    def _top_symbols_json_extra_args(case_dir: str, step_name: str) -> Optional[list]:
+        """复用 PerfAnalyzer 落盘的 ecol 负载拆解排序（--top-symbols-json）。
+
+        update 下 PerfAnalyzer 内嵌符号恢复已降级为「只出排序」，会在
+        ``.symbol_recovery/<step>/load_decomposition_top_symbols.json`` 落盘 ecol 口径。
+        这里把它接力给符号恢复子进程，保证 update 与 perf 集成轨用同一拆解口径；
+        文件缺失时返回 None，子进程回退内部 perf.db 排序（优雅降级）。
+        """
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        out_dir = default_symbol_recovery_output_dir(case_dir, step_name, output_root)
+        top_symbols = out_dir / 'load_decomposition_top_symbols.json'
+        if top_symbols.is_file():
+            return ['--top-symbols-json', str(top_symbols)]
+        return None
+
+    @staticmethod
+    def _run_agent_inference_for_step(
+        out_dir: Path,
+        *,
+        timeout_sec: Optional[float],
+    ) -> Optional[str]:
+        """Agent 推断：HAPRAY_SYMBOL_RECOVERY_AGENT_CMD 或 symbol_recovery step2-openai 子进程。"""
+        tasks = out_dir / 'symbol_recovery_llm_tasks.json'
+        if not tasks.is_file():
+            return None
+        output_json = out_dir / 'symbol_recovery_external_results.json'
+        if output_json.is_file():
+            return str(output_json)
+        sr_root = resolve_symbol_recovery_root()
+        if sr_root is None:
+            logging.warning('Agent inference skipped: symbol recovery root not found')
+            return None
+
+        env_cmd = (os.environ.get('HAPRAY_SYMBOL_RECOVERY_AGENT_CMD') or '').strip()
+        if env_cmd:
+            rendered = (
+                env_cmd.replace('{tasks}', str(tasks))
+                .replace('{output}', str(output_json))
+                .replace('{out_dir}', str(out_dir))
+            )
+            timeout = max(60, int(timeout_sec)) if timeout_sec and timeout_sec > 0 else None
+            logging.info('Running symbol_recovery agent inference command: %s', rendered)
+            try:
+                cp = subprocess.run(
+                    rendered,
+                    cwd=str(sr_root),
+                    timeout=timeout,
+                    check=False,
+                    shell=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    capture_output=True,
+                )
+            except subprocess.TimeoutExpired:
+                logging.warning('Agent inference command timed out')
+                return None
+            except OSError as e:
+                logging.warning('Agent inference command failed to start: %s', e)
+                return None
+            if cp.stdout:
+                logging.info(cp.stdout[:8000])
+            if cp.stderr:
+                logging.info(cp.stderr[:8000])
+            if cp.returncode != 0:
+                logging.warning('Agent inference command exited with code %s', cp.returncode)
+                return None
+            if not output_json.is_file():
+                logging.warning('Agent inference command completed but output missing: %s', output_json)
+                return None
+            return str(output_json)
+
+        tmo = max(60, int(timeout_sec)) if timeout_sec and timeout_sec > 0 else None
+        if not run_symbol_recovery_agent_step2(
+            sr_root,
+            tasks,
+            output_json,
+            timeout_sec=tmo,
+            delay=0.5,
+            resume=False,
+            model=None,
+        ):
+            logging.warning('Agent inference Step2 did not produce: %s', output_json)
+            return None
+        return str(output_json)
+
+    @staticmethod
+    def _count_recovered_function_names(out_dir: Path) -> int:
+        result_path = out_dir / 'symbol_recovery_results.json'
+        if not result_path.is_file():
+            return 0
+        try:
+            payload = json.loads(result_path.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, json.JSONDecodeError):
+            return 0
+        if isinstance(payload, dict):
+            items = payload.get('functions') or payload.get('results') or payload.get('tasks') or []
+        elif isinstance(payload, list):
+            items = payload
+        else:
+            items = []
+        cnt = 0
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            fn = str(it.get('function_name') or it.get('inferred_name') or '').strip()
+            if fn:
+                cnt += 1
+        return cnt
+
+    @staticmethod
+    def _finalize_symbol_recovery_step(
+        case_dir: str,
+        step_name: str,
+        perf_db: Path,
+        top_n: int,
+        stat_method: str,
+    ) -> bool:
+        """写回清单、生成增强火焰图、刷新单步 hiperf HTML 并嵌入符号恢复面板。"""
+        apply_symbol_recovery_manifest_to_scene_outputs(case_dir)
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        generated = maybe_generate_symbol_recovery_html_for_step(
+            case_dir,
+            step_name,
+            top_n=top_n,
+            stat_method=stat_method,
+            output_root=output_root,
+        )
+        step_hiperf = Path(case_dir) / 'hiperf' / step_name
+        enhanced_path = generated or (step_hiperf / symbol_recovery_replaced_html_name('hiperf_report.html'))
+        if not enhanced_path.is_file():
+            logging.error(
+                'Symbol recovery Step4 failed: enhanced flame graph not found for %s/%s (expected %s)',
+                case_dir,
+                step_name,
+                enhanced_path,
+            )
+            return False
+
+        from hapray.analyze.perf_analyzer import PerfAnalyzer
+
+        if not PerfAnalyzer.generate_hiperf_report(str(perf_db)):
+            logging.warning(
+                'Failed to regenerate hiperf_report.html from perf.json for %s/%s',
+                case_dir,
+                step_name,
+            )
+        if not UpdateAction._embed_symbol_recovery_into_hiperf_html(
+            case_dir,
+            step_name,
+            top_n=top_n,
+            stat_method=stat_method,
+            generated_html=generated,
+        ):
+            logging.warning('Symbol recovery iframe embed skipped or failed for %s/%s', case_dir, step_name)
+        logging.info('Symbol recovery finalized with enhanced flame graph: %s', enhanced_path)
+        return True
+
+    @staticmethod
+    def _run_agent_symbol_recovery_step(
+        case_dir: str,
+        step_name: str,
+        perf_db: Path,
+        effective_so: str,
+        top_n: int,
+        stat_method: str,
+    ) -> bool:
+        """Agent 路径：导出任务 → 推断 → 导入回填 perf.json。"""
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        timeout_sec = UpdateAction._symbol_recovery_timeout_sec()
+        import_tpl = (Config.get('symbol_recovery_import_results', '') or '').strip()
+        import_results: Optional[str] = import_tpl.replace('{step}', step_name) if import_tpl else None
+        out_dir = default_symbol_recovery_output_dir(case_dir, step_name, output_root)
+        top_symbols_extra = UpdateAction._top_symbols_json_extra_args(case_dir, step_name)
+
+        if import_results:
+            logging.info('Agent mode: importing precomputed results for %s/%s: %s', case_dir, step_name, import_results)
+            ok = maybe_run_symbol_recovery_for_step(
+                scene_dir=case_dir,
+                step_dir=step_name,
+                perf_db_path=str(perf_db),
+                effective_so_dir=effective_so,
+                top_n=top_n,
+                stat_method=stat_method,
+                output_root=output_root,
+                subprocess_timeout_sec=timeout_sec,
+                extra_args=top_symbols_extra,
+                prompt_only=False,
+                import_llm_results=import_results,
+            )
+            if ok and UpdateAction._check_symbol_recovery_results_valid(case_dir, step_name):
+                ok = UpdateAction._finalize_symbol_recovery_step(case_dir, step_name, perf_db, top_n, stat_method)
+            return ok
+
+        ok = maybe_run_symbol_recovery_for_step(
+            scene_dir=case_dir,
+            step_dir=step_name,
+            perf_db_path=str(perf_db),
+            effective_so_dir=effective_so,
+            top_n=top_n,
+            stat_method=stat_method,
+            output_root=output_root,
+            subprocess_timeout_sec=timeout_sec,
+            extra_args=top_symbols_extra,
+            prompt_only=True,
+        )
+        if not ok:
+            return False
+
+        inferred_json = UpdateAction._run_agent_inference_for_step(out_dir, timeout_sec=timeout_sec)
+        if not inferred_json:
+            logging.warning('Agent mode: inference failed for %s/%s', case_dir, step_name)
+            return False
+
+        ok = maybe_run_symbol_recovery_for_step(
+            scene_dir=case_dir,
+            step_dir=step_name,
+            perf_db_path=str(perf_db),
+            effective_so_dir=effective_so,
+            top_n=top_n,
+            stat_method=stat_method,
+            output_root=output_root,
+            subprocess_timeout_sec=timeout_sec,
+            extra_args=top_symbols_extra,
+            prompt_only=False,
+            import_llm_results=inferred_json,
+        )
+        if not ok:
+            logging.warning('Agent mode: import failed for %s/%s: %s', case_dir, step_name, inferred_json)
+            return False
+        if UpdateAction._count_recovered_function_names(out_dir) <= 0:
+            logging.warning(
+                'Agent mode: no valid function names after import for %s/%s',
+                case_dir,
+                step_name,
+            )
+            return False
+        if not UpdateAction._check_symbol_recovery_results_valid(case_dir, step_name):
+            logging.warning('Agent mode: invalid replacements for %s/%s', case_dir, step_name)
+            return False
+        return UpdateAction._finalize_symbol_recovery_step(case_dir, step_name, perf_db, top_n, stat_method)
+
+    @staticmethod
     def _run_symbol_recovery_for_case(
         case_dir: str,
         effective_so: Optional[str],
@@ -995,10 +1422,9 @@ class UpdateAction:
 
         遍历 case_dir 下的所有 step 目录，对每个包含 perf.db 的 step 执行符号恢复。
 
-        执行策略：
-        1. 如果配置了 LLM 环境且不是强制 agent 模式，先尝试 LLM 模式
-        2. 如果 LLM 模式失败或无效，自动回退到 Agent 模式
-        3. 如果 Agent 模式也失败，才标记为失败
+        执行策略（update 默认 Agent）：
+        1. 仅当显式启用 LLM 模式（--symbol-recovery-llm-mode）且环境就绪时，先尝试在线 LLM
+        2. 否则或 LLM 失败/无效时，走 Agent 模式（导出任务 → 推断 → 导入）
         """
         if not effective_so:
             logging.debug('Skipping symbol recovery for %s: no effective SO directory', case_dir)
@@ -1008,100 +1434,77 @@ class UpdateAction:
         if not case_path.is_dir():
             return
 
-        # 查找所有 step 目录下的 perf.db
-        for step_dir in case_path.iterdir():
-            if not step_dir.is_dir():
-                continue
-            # 检查是否是 step 目录 (step1, step2, ...)
-            if not step_dir.name.startswith('step'):
-                continue
+        for step_name, _hiperf_dir, perf_db in UpdateAction._iter_symbol_recovery_steps(case_dir):
+            logging.info('Running symbol recovery for %s/%s', case_dir, step_name)
 
-            hiperf_dir = step_dir / 'hiperf'
-            if not hiperf_dir.is_dir():
-                continue
-
-            perf_db = hiperf_dir / 'perf.db'
-            if not perf_db.is_file():
-                continue
-
-            logging.info('Running symbol recovery for %s/%s', case_dir, step_dir.name)
-
-            # 判断是否应该先尝试 LLM 模式
-            # 条件：LLM 环境已配置 AND (不是强制 agent 模式 OR agent_mode 为 False)
-            should_try_llm_first = llm_env_configured and not agent_mode
+            use_llm_mode = bool(Config.get('symbol_recovery_use_llm_mode', False))
+            should_try_llm_first = use_llm_mode and llm_env_configured and not agent_mode
+            timeout_sec = UpdateAction._symbol_recovery_timeout_sec()
+            output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
 
             llm_success = False
-            agent_success = False
-
-            # 第一步：尝试 LLM 模式（如果配置了 LLM）
             if should_try_llm_first:
-                logging.info('Attempting LLM mode for symbol recovery (llm_env_configured=%s)', llm_env_configured)
+                logging.info('Attempting LLM mode for symbol recovery (legacy --symbol-recovery-llm-mode)')
                 try:
                     llm_success = maybe_run_symbol_recovery_for_step(
                         scene_dir=str(case_dir),
-                        step_dir=step_dir.name,
+                        step_dir=step_name,
                         perf_db_path=str(perf_db),
                         effective_so_dir=effective_so,
                         top_n=top_n,
                         stat_method=stat_method,
-                        output_root=None,
-                        extra_args=None,
+                        output_root=output_root,
+                        subprocess_timeout_sec=timeout_sec,
+                        extra_args=UpdateAction._top_symbols_json_extra_args(str(case_dir), step_name),
                         prompt_only=False,
                     )
-                    if llm_success:
-                        # 验证结果是否有效（不包含占位符）
-                        if UpdateAction._check_symbol_recovery_results_valid(str(case_dir), step_dir.name):
-                            logging.info('LLM symbol recovery completed and validated for %s/%s', case_dir, step_dir.name)
-                            continue  # 成功且有效，跳到下一个 step
-                        else:
-                            logging.warning('LLM symbol recovery produced invalid results (placeholders detected), will fallback to agent mode')
-                            llm_success = False
-                            # 清理错误产物
-                            UpdateAction._cleanup_symbol_recovery_error_outputs(
-                                str(case_dir), step_dir.name, stat_method, top_n
-                            )
+                    if llm_success and UpdateAction._check_symbol_recovery_results_valid(str(case_dir), step_name):
+                        if UpdateAction._finalize_symbol_recovery_step(
+                            str(case_dir), step_name, perf_db, top_n, stat_method
+                        ):
+                            logging.info('LLM symbol recovery completed for %s/%s', case_dir, step_name)
+                            continue
+                        llm_success = False
                     else:
-                        logging.warning('LLM symbol recovery failed for %s/%s, will fallback to agent mode', case_dir, step_dir.name)
+                        llm_success = False
+                    if not llm_success:
+                        logging.warning(
+                            'LLM symbol recovery failed or invalid for %s/%s, falling back to agent mode',
+                            case_dir,
+                            step_name,
+                        )
+                        UpdateAction._cleanup_symbol_recovery_error_outputs(
+                            str(case_dir), step_name, stat_method, top_n
+                        )
                 except Exception as e:
-                    logging.exception('Error in LLM symbol recovery for %s/%s: %s', case_dir, step_dir.name, str(e))
+                    logging.exception('Error in LLM symbol recovery for %s/%s: %s', case_dir, step_name, str(e))
                     llm_success = False
 
-            # 第二步：如果 LLM 失败或未配置，尝试 Agent 模式
-            # 条件：LLM 未配置 或 LLM 失败 或 强制 agent 模式
-            should_try_agent = not llm_env_configured or not llm_success or agent_mode
-
-            if should_try_agent:
-                logging.info('Attempting Agent mode for symbol recovery (llm_env_configured=%s, llm_success=%s, agent_mode=%s)',
-                            llm_env_configured, llm_success, agent_mode)
-                try:
-                    agent_success = maybe_run_symbol_recovery_for_step(
-                        scene_dir=str(case_dir),
-                        step_dir=step_dir.name,
-                        perf_db_path=str(perf_db),
-                        effective_so_dir=effective_so,
-                        top_n=top_n,
-                        stat_method=stat_method,
-                        output_root=None,
-                        extra_args=['--prompt-only'],
-                        prompt_only=True,
-                    )
-                    if agent_success:
-                        logging.info('Agent mode symbol recovery (prompt-only) completed for %s/%s', case_dir, step_dir.name)
-                        # Agent 模式只导出 tasks，需要后续执行 Agent 推断并回填
-                        # 这里记录状态，但暂不标记为最终成功
-                    else:
-                        logging.error('Agent mode symbol recovery failed for %s/%s', case_dir, step_dir.name)
-                except Exception as e:
-                    logging.exception('Error in Agent symbol recovery for %s/%s: %s', case_dir, step_dir.name, str(e))
-                    agent_success = False
-
-            # 最终状态记录
             if llm_success:
-                logging.info('Symbol recovery completed (LLM mode) for %s/%s', case_dir, step_dir.name)
-            elif agent_success:
-                logging.info('Symbol recovery exported tasks (Agent mode) for %s/%s - requires external inference', case_dir, step_dir.name)
+                continue
+
+            logging.info(
+                'Attempting Agent mode for symbol recovery (use_llm_mode=%s, agent_mode=%s)',
+                use_llm_mode,
+                agent_mode,
+            )
+            try:
+                agent_success = UpdateAction._run_agent_symbol_recovery_step(
+                    str(case_dir),
+                    step_name,
+                    perf_db,
+                    effective_so,
+                    top_n,
+                    stat_method,
+                )
+            except Exception as e:
+                logging.exception('Error in Agent symbol recovery for %s/%s: %s', case_dir, step_name, str(e))
+                agent_success = False
+
+            if agent_success:
+                logging.info('Symbol recovery completed (Agent mode) for %s/%s', case_dir, step_name)
             else:
-                logging.error('Symbol recovery failed (both LLM and Agent modes) for %s/%s', case_dir, step_dir.name)
+                logging.error('Symbol recovery failed for %s/%s', case_dir, step_name)
 
     @staticmethod
     def process_reports(
@@ -1130,9 +1533,10 @@ class UpdateAction:
         effective_so = Config.get('so_dir', '') or None
         top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
         stat_method = Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count'
-        agent_mode = bool(Config.get('symbol_recovery_agent_mode', False))
+        agent_mode = bool(Config.get('symbol_recovery_agent_mode', True))
         no_llm = bool(Config.get('symbol_recovery_no_llm', False))
         llm_env_configured = bool(Config.get('symbol_recovery_llm_env_configured', False))
+        use_llm_mode = bool(Config.get('symbol_recovery_use_llm_mode', False))
 
         # 检查是否应该执行符号恢复
         should_run_symbol_recovery = (
@@ -1142,19 +1546,25 @@ class UpdateAction:
 
         if should_run_symbol_recovery:
             logging.info(
-                'Symbol recovery will be executed for all test cases (so_dir=%s, top_n=%s, stat=%s, agent_mode=%s)',
-                effective_so, top_n, stat_method, agent_mode
+                'Symbol recovery will be executed for all test cases '
+                '(so_dir=%s, top_n=%s, stat=%s, agent_mode=%s, use_llm_mode=%s)',
+                effective_so,
+                top_n,
+                stat_method,
+                agent_mode,
+                use_llm_mode,
             )
+
+        report_generator = ReportGenerator(
+            use_refined_lib_symbol=use_refined_lib_symbol,
+            export_comparison=export_comparison,
+            symbol_statistic=symbol_statistic,
+            time_range_strings=time_range_strings,
+            enable_thread_analysis=enable_thread_analysis,
+        )
 
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
-            report_generator = ReportGenerator(
-                use_refined_lib_symbol=use_refined_lib_symbol,
-                export_comparison=export_comparison,
-                symbol_statistic=symbol_statistic,
-                time_range_strings=time_range_strings,
-                enable_thread_analysis=enable_thread_analysis,
-            )
 
             for case_dir in testcase_dirs:
                 scene_name = os.path.basename(case_dir)
@@ -1195,6 +1605,84 @@ class UpdateAction:
             logging.info('Symbol recovery completed for all test cases')
             logging.info('=' * 80)
 
+            # 若随后还要跑 root-cause，则其结束后会再做一次 refresh（同样会嵌入增强火焰图），
+            # 这里就跳过本次 refresh，避免对百 MB 级 trace 数据做重复的 clean+压缩+生成 HTML（一次可省数十秒）。
+            if bool(Config.get('root_cause_enabled', False)):
+                logging.info('Deferring composite refresh: root-cause pass will regenerate hapray_report.html once.')
+            else:
+                logging.info('Refreshing composite hapray_report.html to embed enhanced flame graphs...')
+                for case_dir in testcase_dirs:
+                    try:
+                        report_generator.refresh_hapray_report_after_symbol_recovery(case_dir)
+                    except Exception as e:
+                        logging.error('Failed to refresh hapray_report.html for %s: %s', case_dir, e)
+
+        if bool(Config.get('root_cause_enabled', False)):
+            logging.info('=' * 80)
+            logging.info('Starting root-cause analysis for all test cases')
+            logging.info('=' * 80)
+
+            # HAP packages are only needed for root-cause; prepare them on-demand here
+            bundle_names_rc = UpdateAction._collect_bundle_names(testcase_dirs)
+            user_app_src_path = Config.get('app_packages_user_source', '') or None
+            user_app_src_rc = Path(user_app_src_path) if user_app_src_path else None
+            pkgs_by_bundle, app_pkg_source = prepare_app_packages_for_report(
+                report_dir,
+                bundle_names_rc,
+                user_app_src_rc,
+                device_downloader=UpdateAction._download_app_package_for_bundle,
+            )
+            if pkgs_by_bundle:
+                logging.info(
+                    'App packages ready for root-cause: %d bundle(s) (source=%s): %s',
+                    len(pkgs_by_bundle),
+                    app_pkg_source,
+                    ', '.join(sorted(pkgs_by_bundle)),
+                )
+            elif bundle_names_rc:
+                logging.warning(
+                    'No HAP/app packages available (user path missing/invalid and device pull failed). '
+                    'Provide --app-packages-dir or HAPRAY_APP_PACKAGES_DIR, or connect device with hdc. '
+                    'Root-cause will be skipped.'
+                )
+
+            skip_rc_llm = bool(Config.get('root_cause_skip_llm', False))
+            for case_dir in testcase_dirs:
+                bundle = UpdateAction._read_bundle_name_from_testinfo(case_dir)
+                if not bundle:
+                    logging.info('Root-cause skipped for %s: no bundle name in testInfo.json', case_dir)
+                    continue
+                if not app_packages_ready_for_root_cause(report_dir, bundle):
+                    logging.info(
+                        'Root-cause skipped for %s: no HAP/app packages for bundle %s '
+                        '(use --app-packages-dir or device pull)',
+                        case_dir,
+                        bundle,
+                    )
+                    continue
+                try:
+                    if run_root_cause_for_case(
+                        case_dir,
+                        report_dir,
+                        bundle,
+                        skip_llm=skip_rc_llm,
+                    ):
+                        logging.info('Root-cause completed for %s', case_dir)
+                    else:
+                        logging.warning('Root-cause did not produce report for %s', case_dir)
+                except Exception as e:
+                    logging.error('Root-cause failed for %s: %s', case_dir, e)
+            logging.info('Refreshing composite report to embed root-cause results...')
+            for case_dir in testcase_dirs:
+                try:
+                    report_generator.refresh_hapray_report_after_symbol_recovery(case_dir)
+                except Exception as e:
+                    logging.error('Failed to refresh report after root-cause for %s: %s', case_dir, e)
+            logging.info('=' * 80)
+            logging.info('Root-cause pass completed')
+            logging.info('=' * 80)
+
+        if should_run_symbol_recovery:
             # 符号恢复完成后,更新负载分析 Excel 中的符号名
             logging.info('Updating load analysis Excel with recovered symbols...')
             for case_dir in testcase_dirs:

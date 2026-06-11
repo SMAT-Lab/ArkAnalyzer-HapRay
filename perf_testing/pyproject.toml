@@ -38,6 +38,7 @@ dependencies = [
     "hypium>=6.0.7.210",
     "phone-agent>=0.1.1",
     "anthropic>=0.94.0",
+    "openai>=2.30.0",
 ]
 
 [project.scripts]
@@ -158,6 +159,8 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "test_*.py" = ["PLR2004", "S101"] # 测试文件中忽略魔术值和使用断言
 "__init__.py" = ["F401"] # __init__.py 中允许未使用的导入
+"hapray/core/common/symbol_recovery_bridge.py" = ["PLC0415"]
+"hapray/actions/update_action.py" = ["PLC0415"]
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

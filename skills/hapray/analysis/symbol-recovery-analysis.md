@@ -99,12 +99,18 @@ DEEPSEEK_API_KEY=your_key
 - HTML 报告中热点函数列：找 `libxxx.so+0x...` 地址格式
 - perf.data 原始数据：用 `hiperf_report.html` 查看 Flame Graph，高占比无名称函数
 
-确认需要分析的 SO 路径。SO 文件需从设备拉取：
+确认需要分析的 SO 路径。
+
+**优先使用用户提供的本地 SO 目录**（`update --so_dir` / `HAPRAY_SO_DIR`）。主 Skill 要求在 `update` 前交互确认路径；**已提供则不会从手机拉取**。
+
+仅当用户未提供本地目录时，`update` 才尝试 `hdc` 自动拉取到 `.symbol_recovery_libs/`；若仍失败则**跳过符号恢复**。
+
+手动从设备拷贝示例（供用户准备 `--so_dir` 目录时参考）：
 
 ```bash
 # 从设备拉取 SO（以 libxxx.so 为例）
-hdc file recv /proc/<pid>/root/data/storage/el1/bundle/libs/arm64/libxxx.so ./so/
-# 或从 HAP/HSP 中解压
+hdc file recv /data/storage/el1/bundle/<包名>/libs/arm64 ./so/
+# 或从 HAP/HSP 中解压后放入同一目录
 ```
 
 ### Step 2：准备数据文件

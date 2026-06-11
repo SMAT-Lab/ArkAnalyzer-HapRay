@@ -21,6 +21,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
+import requests
+
 from hapray.haptest.state_manager import StateComparisonResult, StateStackEntry, TestContext
 
 Log = logging.getLogger('HapTest.LLMComparator')
@@ -41,7 +43,7 @@ class LLMStateComparator:
         base_url: str = None,
         enable_parallel: bool = True,
         cache_ttl: int = 3600,
-        fallback_to_hash: bool = True
+        fallback_to_hash: bool = True,
     ):
         """
         Initialize LLM state comparator
@@ -70,7 +72,7 @@ class LLMStateComparator:
             'cache_hits': 0,
             'api_calls': 0,
             'fallback_used': 0,
-            'parallel_batches': 0
+            'parallel_batches': 0,
         }
 
         # Store last comparison results for visualization
@@ -79,11 +81,7 @@ class LLMStateComparator:
         Log.info(f'[LLMComparator] Initialized - Model: {self.model}, Parallel: {enable_parallel}')
 
     def compare_with_stack(
-        self,
-        new_state,
-        new_description: str,
-        state_stack: list,
-        test_context: TestContext
+        self, new_state, new_description: str, state_stack: list, test_context: TestContext
     ) -> tuple[bool, Optional[int]]:
         """
         Compare new state with all states in stack
@@ -124,13 +122,7 @@ class LLMStateComparator:
         is_new_state = best_match_idx is None
         return (is_new_state, best_match_idx)
 
-    def _compare_parallel(
-        self,
-        new_state,
-        new_description: str,
-        state_stack: list,
-        test_context: TestContext
-    ) -> list:
+    def _compare_parallel(self, new_state, new_description: str, state_stack: list, test_context: TestContext) -> list:
         """
         Compare new state with multiple states in parallel
         Uses ThreadPoolExecutor for parallel API calls
@@ -140,13 +132,7 @@ class LLMStateComparator:
         with ThreadPoolExecutor(max_workers=min(5, len(state_stack))) as executor:
             # Submit all comparison tasks
             future_to_idx = {
-                executor.submit(
-                    self._compare_two_states,
-                    new_state,
-                    new_description,
-                    stack_entry,
-                    test_context
-                ): idx
+                executor.submit(self._compare_two_states, new_state, new_description, stack_entry, test_context): idx
                 for idx, stack_entry in enumerate(state_stack)
             }
 
@@ -158,20 +144,13 @@ class LLMStateComparator:
                 except Exception as e:
                     Log.error(f'[LLMComparator] Parallel comparison failed for index {idx}: {e}')
                     # Use fallback for this comparison
-                    results[idx] = self._fallback_comparison(
-                        new_state.state_hash,
-                        state_stack[idx].state_hash
-                    )
+                    results[idx] = self._fallback_comparison(new_state.state_hash, state_stack[idx].state_hash)
 
         self.stats['parallel_batches'] += 1
         return results
 
     def _compare_sequential(
-        self,
-        new_state,
-        new_description: str,
-        state_stack: list,
-        test_context: TestContext
+        self, new_state, new_description: str, state_stack: list, test_context: TestContext
     ) -> list:
         """
         Compare new state with states sequentially
@@ -189,24 +168,22 @@ class LLMStateComparator:
                 # Fill remaining with "not same" results
                 remaining = len(state_stack) - len(results)
                 for _ in range(remaining):
-                    results.append(StateComparisonResult(
-                        is_same_state=False,
-                        confidence=1.0,
-                        reasoning="Skipped due to early match",
-                        similarity_score=0.0,
-                        key_differences=[],
-                        used_fallback=False
-                    ))
+                    results.append(
+                        StateComparisonResult(
+                            is_same_state=False,
+                            confidence=1.0,
+                            reasoning='Skipped due to early match',
+                            similarity_score=0.0,
+                            key_differences=[],
+                            used_fallback=False,
+                        )
+                    )
                 break
 
         return results
 
     def _compare_two_states(
-        self,
-        new_state,
-        new_description: str,
-        stack_entry: StateStackEntry,
-        test_context: TestContext
+        self, new_state, new_description: str, stack_entry: StateStackEntry, test_context: TestContext
     ) -> StateComparisonResult:
         """
         Compare two states using LLM
@@ -237,12 +214,7 @@ class LLMStateComparator:
 
         # Call LLM API
         try:
-            result = self._call_comparison_api(
-                new_state,
-                new_description,
-                stack_entry,
-                test_context
-            )
+            result = self._call_comparison_api(new_state, new_description, stack_entry, test_context)
             self.stats['api_calls'] += 1
             self._cache_result(new_state.state_hash, stack_entry.state_hash, result)
             return result
@@ -251,39 +223,23 @@ class LLMStateComparator:
             Log.error(f'[LLMComparator] API call failed: {e}')
             if self.fallback_to_hash:
                 self.stats['fallback_used'] += 1
-                return self._fallback_comparison(
-                    new_state.state_hash,
-                    stack_entry.state_hash
-                )
+                return self._fallback_comparison(new_state.state_hash, stack_entry.state_hash)
             raise
 
     def _call_comparison_api(
-        self,
-        new_state,
-        new_description: str,
-        stack_entry: StateStackEntry,
-        test_context: TestContext
+        self, new_state, new_description: str, stack_entry: StateStackEntry, test_context: TestContext
     ) -> StateComparisonResult:
         """
         Call LLM API to compare two states
         """
-        import requests
-
         # Build comparison prompt
-        prompt = self._build_comparison_prompt(
-            new_description,
-            stack_entry.description,
-            test_context
-        )
+        prompt = self._build_comparison_prompt(new_description, stack_entry.description, test_context)
 
         # Encode screenshots
         new_screenshot_b64 = self._encode_image(new_state.screenshot_path)
         old_screenshot_b64 = self._encode_image(stack_entry.screenshot_path)
 
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self.api_key}'
-        }
+        headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {self.api_key}'}
 
         payload = {
             'model': self.model,
@@ -296,29 +252,21 @@ class LLMStateComparator:
                             'type': 'image_url',
                             'image_url': {
                                 'url': f'data:image/png;base64,{old_screenshot_b64}',
-                                'detail': 'low'  # Use low detail for cost efficiency
-                            }
+                                'detail': 'low',  # Use low detail for cost efficiency
+                            },
                         },
                         {
                             'type': 'image_url',
-                            'image_url': {
-                                'url': f'data:image/png;base64,{new_screenshot_b64}',
-                                'detail': 'low'
-                            }
-                        }
-                    ]
+                            'image_url': {'url': f'data:image/png;base64,{new_screenshot_b64}', 'detail': 'low'},
+                        },
+                    ],
                 }
             ],
             'max_completion_tokens': 300,  # Keep response concise
-            'temperature': 0.3   # Lower temperature for more consistent results
+            'temperature': 0.3,  # Lower temperature for more consistent results
         }
 
-        response = requests.post(
-            f'{self.base_url}/chat/completions',
-            headers=headers,
-            json=payload,
-            timeout=300
-        )
+        response = requests.post(f'{self.base_url}/chat/completions', headers=headers, json=payload, timeout=300)
 
         if response.status_code != 200:
             raise RuntimeError(f'API call failed: {response.status_code} - {response.text}')
@@ -332,22 +280,17 @@ class LLMStateComparator:
         # Parse response
         return self._parse_comparison_response(llm_response)
 
-    def _build_comparison_prompt(
-        self,
-        new_description: str,
-        old_description: str,
-        test_context: TestContext
-    ) -> str:
+    def _build_comparison_prompt(self, new_description: str, old_description: str, test_context: TestContext) -> str:
         """
         Build prompt for state comparison with test context
         """
         # Handle case where new_description is empty (will be backfilled later)
         if not new_description:
-            new_state_info = "Description: [Not yet generated - please analyze from the screenshot]"
+            new_state_info = 'Description: [Not yet generated - please analyze from the screenshot]'
         else:
-            new_state_info = f"Description: {new_description}"
+            new_state_info = f'Description: {new_description}'
 
-        prompt = f"""You are testing the app: {test_context.app_name} ({test_context.app_package})
+        return f"""You are testing the app: {test_context.app_name} ({test_context.app_package})
 Test goal: {test_context.test_goal}
 Current exploration depth: {test_context.current_depth}/{test_context.target_depth}
 
@@ -367,7 +310,7 @@ Description: {old_description}
 
 **Important:**
 - Focus on SEMANTIC similarity, not pixel-perfect matching
-- Different data on the same page template = SAME state 
+- Different data on the same page template = SAME state
 - Different page types (list vs detail) = DIFFERENT states
 - Scrolled versions of the same page = SAME state
 - If Screen 2 has no description, analyze it directly from the screenshot
@@ -382,8 +325,6 @@ Description: {old_description}
 }}
 
 Respond with JSON only, no additional text."""
-
-        return prompt
 
     def _parse_comparison_response(self, llm_response: str) -> StateComparisonResult:
         """
@@ -406,7 +347,7 @@ Respond with JSON only, no additional text."""
                 similarity_score=float(data.get('similarity_score', 0.0)),
                 key_differences=data.get('key_differences', []),
                 used_fallback=False,
-                hash_match=False
+                hash_match=False,
             )
 
         except Exception as e:
@@ -415,10 +356,10 @@ Respond with JSON only, no additional text."""
             return StateComparisonResult(
                 is_same_state=False,
                 confidence=0.0,
-                reasoning=f"Parse error: {str(e)}",
+                reasoning=f'Parse error: {str(e)}',
                 similarity_score=0.0,
                 key_differences=[],
-                used_fallback=True
+                used_fallback=True,
             )
 
     def _fallback_comparison(self, hash1: str, hash2: str) -> StateComparisonResult:
@@ -429,11 +370,11 @@ Respond with JSON only, no additional text."""
         return StateComparisonResult(
             is_same_state=is_same,
             confidence=1.0 if is_same else 0.0,
-            reasoning="Fallback to hash comparison",
+            reasoning='Fallback to hash comparison',
             similarity_score=1.0 if is_same else 0.0,
-            key_differences=[] if is_same else ["Hash mismatch"],
+            key_differences=[] if is_same else ['Hash mismatch'],
             used_fallback=True,
-            hash_match=is_same
+            hash_match=is_same,
         )
 
     def _encode_image(self, image_path: str) -> str:
@@ -451,21 +392,17 @@ Respond with JSON only, no additional text."""
         """
         Generate cache key for comparison
         """
-        return f"{hash1}_{hash2}"
+        return f'{hash1}_{hash2}'
 
     def _cache_result(self, hash1: str, hash2: str, result: StateComparisonResult):
         """
         Cache comparison result
         """
         cache_key = self._get_cache_key(hash1, hash2)
-        self.comparison_cache[cache_key] = {
-            'result': result,
-            'timestamp': time.time()
-        }
+        self.comparison_cache[cache_key] = {'result': result, 'timestamp': time.time()}
 
     def _is_cache_expired(self, timestamp: float) -> bool:
         """
         Check if cache entry is expired
         """
         return time.time() - timestamp > self.cache_ttl
-

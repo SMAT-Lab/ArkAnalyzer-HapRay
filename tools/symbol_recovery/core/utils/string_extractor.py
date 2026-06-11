@@ -19,6 +19,7 @@ def _default_disassembler():
 
     return util.create_disassembler()
 
+
 # 需要过滤的字符串模式（错误消息、调试信息等）
 FILTERED_STRING_PATTERNS = [
     r'^WeakRef:',

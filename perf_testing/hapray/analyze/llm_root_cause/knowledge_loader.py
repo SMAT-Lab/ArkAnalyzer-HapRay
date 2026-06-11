@@ -33,20 +33,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-_KV_RE = re.compile(r"^(\w+)\s*:\s*(.+)$", re.MULTILINE)
-_H2_RE = re.compile(r"^## .+", re.MULTILINE)
+_FRONTMATTER_RE = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.DOTALL)
+_KV_RE = re.compile(r'^(\w+)\s*:\s*(.+)$', re.MULTILINE)
+_H2_RE = re.compile(r'^## .+', re.MULTILINE)
 
 # 中文分词近似：按 2-gram 切片 + 标点切割
-_ZH_SPLIT_RE = re.compile(r"[\s\-_/（）【】：。，、\[\]()]+")
+_ZH_SPLIT_RE = re.compile(r'[\s\-_/（）【】：。，、\[\]()]+')
 
 
 # ── 数据结构 ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class KnowledgeSection:
     """一个段落（H2 级别）的知识片段。"""
+
     file_stem: str
     heading: str
     body: str
@@ -62,7 +63,7 @@ class KnowledgeSection:
         if not signals:
             return float(self.priority)
         hit = 0
-        body_lower = (self.heading + " " + self.body).lower()
+        body_lower = (self.heading + ' ' + self.body).lower()
         for sig in signals:
             for token in _tokenize(sig):
                 if token and len(token) >= 2 and token in body_lower:
@@ -84,12 +85,13 @@ def _tokenize(text: str) -> list[str]:
         # 2-gram 切片（覆盖中文短语）
         if len(p) >= 4:
             for i in range(len(p) - 1):
-                tokens.append(p[i:i+2])
+                tokens.append(p[i : i + 2])
         tokens.append(p)
     return tokens
 
 
 # ── 解析工具 ────────────────────────────────────────────────────────────────
+
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """提取 YAML frontmatter，返回 (meta, body)。"""
@@ -100,26 +102,26 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     meta: dict[str, Any] = {}
     for kv in _KV_RE.finditer(m.group(1)):
         key, val = kv.group(1).strip(), kv.group(2).strip()
-        if key == "priority":
+        if key == 'priority':
             try:
                 meta[key] = int(val)
             except ValueError:
                 meta[key] = 5
-        elif key in ("applicable", "keywords"):
+        elif key in ('applicable', 'keywords'):
             items = re.findall(r'"([^"]+)"', val)
             if not items:
-                items = [v.strip().strip('"') for v in val.strip("[]").split(",")]
+                items = [v.strip().strip('"') for v in val.strip('[]').split(',')]
             meta[key] = [i for i in items if i]
         else:
             meta[key] = val.strip('"')
 
-    body = text[m.end():]
+    body = text[m.end() :]
     return meta, body
 
 
 def _extract_keywords_from_heading(heading: str) -> set[str]:
     """从 H2 标题提取隐式关键词（按分隔符切割）。"""
-    clean = re.sub(r"^#+\s*", "", heading)
+    clean = re.sub(r'^#+\s*', '', heading)
     parts = _ZH_SPLIT_RE.split(clean.lower())
     return {p for p in parts if len(p) >= 2}
 
@@ -137,35 +139,40 @@ def _split_into_sections(
     if not splits:
         # 无 H2，整篇作为一个段落
         heading = file_stem
-        return [KnowledgeSection(
-            file_stem=file_stem,
-            heading=heading,
-            body=body.strip(),
-            priority=priority,
-            keywords=set(file_keywords),
-        )]
+        return [
+            KnowledgeSection(
+                file_stem=file_stem,
+                heading=heading,
+                body=body.strip(),
+                priority=priority,
+                keywords=set(file_keywords),
+            )
+        ]
 
     sections: list[KnowledgeSection] = []
     for idx, (pos, heading) in enumerate(splits):
         # 当前段落的 body 是从本标题到下一标题之间的内容
         end = splits[idx + 1][0] if idx + 1 < len(splits) else len(body)
-        section_body = body[pos + len(heading):end].strip()
+        section_body = body[pos + len(heading) : end].strip()
         kw = _extract_keywords_from_heading(heading) | set(file_keywords)
-        sections.append(KnowledgeSection(
-            file_stem=file_stem,
-            heading=heading.strip(),
-            body=section_body,
-            priority=priority,
-            keywords=kw,
-        ))
+        sections.append(
+            KnowledgeSection(
+                file_stem=file_stem,
+                heading=heading.strip(),
+                body=section_body,
+                priority=priority,
+                keywords=kw,
+            )
+        )
     return sections
 
 
 # ── 公共接口 ────────────────────────────────────────────────────────────────
 
+
 def build_knowledge_index(
     knowledge_dir: str | Path,
-    checker: str = "",
+    checker: str = '',
 ) -> list[KnowledgeSection]:
     """
     扫描 knowledge/ 目录，构建段落级内存索引。
@@ -188,18 +195,18 @@ def build_knowledge_index(
 
     all_sections: list[KnowledgeSection] = []
 
-    for md_path in sorted(knowledge_dir.glob("*.md")):
-        if md_path.name == "README.md":
+    for md_path in sorted(knowledge_dir.glob('*.md')):
+        if md_path.name == 'README.md':
             continue
         try:
-            raw = md_path.read_text(encoding="utf-8")
+            raw = md_path.read_text(encoding='utf-8')
         except OSError:
             continue
 
         meta, body = _parse_frontmatter(raw)
-        priority: int = meta.get("priority", 5)
-        applicable: list[str] = meta.get("applicable", [])
-        file_keywords: list[str] = meta.get("keywords", [])
+        priority: int = meta.get('priority', 5)
+        applicable: list[str] = meta.get('applicable', [])
+        file_keywords: list[str] = meta.get('keywords', [])
 
         # checker 过滤（applicable 为空表示适用所有）
         if checker and applicable and checker not in applicable:
@@ -247,7 +254,7 @@ def retrieve_knowledge(
         格式化的知识文本；若无匹配则返回空字符串。
     """
     if not sections:
-        return ""
+        return ''
 
     # 计算各段落得分并排序
     scored = sorted(
@@ -273,25 +280,25 @@ def retrieve_knowledge(
         seen_files[sec.file_stem] = seen_files.get(sec.file_stem, 0) + 1
 
     if not selected:
-        return ""
+        return ''
 
     # 按文件和段落顺序重新排列（保持文档可读性）
     selected.sort(key=lambda s: (s.file_stem, s.heading))
 
     parts: list[str] = []
-    current_file = ""
+    current_file = ''
     for sec in selected:
         if sec.file_stem != current_file:
             current_file = sec.file_stem
-            parts.append(f"**[来源: {sec.file_stem}]**\n")
-        parts.append(f"{sec.heading}\n\n{sec.body}\n")
+            parts.append(f'**[来源: {sec.file_stem}]**\n')
+        parts.append(f'{sec.heading}\n\n{sec.body}\n')
 
-    return "\n".join(parts)
+    return '\n'.join(parts)
 
 
 def load_knowledge(
     knowledge_dir: str | Path,
-    checker: str = "",
+    checker: str = '',
     context_signals: list[str] | None = None,
     max_chars: int = 5000,
 ) -> str:

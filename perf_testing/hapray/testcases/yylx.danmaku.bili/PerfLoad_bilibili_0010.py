@@ -22,6 +22,7 @@ class PerfLoad_bilibili_0010(PerfTestCase):
 
     def process(self):
         self.start_app()
+
         def step1():
             time.sleep(5)
 

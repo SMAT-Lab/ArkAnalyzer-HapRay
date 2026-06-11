@@ -59,7 +59,7 @@ def __getattr__(name: str) -> Any:
     if name in _LAZY_SYMBOL_REPLACER_EXPORTS:
         symbol_replacer = importlib.import_module(f'{__name__}.symbol_replacer')
         return getattr(symbol_replacer, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 __all__ = [
