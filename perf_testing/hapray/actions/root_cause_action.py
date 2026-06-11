@@ -139,7 +139,7 @@ class RootCauseAction:
         parser.add_argument(
             '--skip-llm',
             action='store_true',
-            help='Skip LLM call; root_cause.md will contain the evidence report only (same as root_cause_evidence.md)',
+            help='Skip LLM call; root_cause.md will contain a structured summary with Pending Agent Inference placeholders (different from root_cause_evidence.md)',
         )
         parser.add_argument(
             '--stream',

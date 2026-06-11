@@ -16,7 +16,7 @@ description: |
 
 ## 六阶段流水线
 
-> **核心变更（v1.6，阶段骨架不变，仅改语义）**：`perf` 已产出 `report/` 下全部分析器数据（`summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json`、`hapray_report.*`）。**阶段 3 `gen-perf-report`（`update` 符号恢复）从「必跑」降为「按需」**：用户明确要求符号恢复、或需要符号级热点/火焰图 stripped 时执行，否则**跳过阶段 3**，直接进入阶段 4 读 `report/` 做高负载分析。**阶段 5 root-cause 脱离 `update`**（独立 CLI + Agent），且**不限空刷**。
+> **核心变更（v1.6，阶段骨架不变，仅改语义）**：`perf` 已产出 `report/` 下全部分析器数据（`summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json`、`hapray_report.*`）。**阶段 3 `gen-perf-report`（`update` 符号恢复）从「必跑」降为「按需」**：用户明确要求符号恢复、或需要符号级热点/火焰图 stripped 时执行，否则**跳过阶段 3**，直接进入阶段 4 读 `report/` 做高负载分析。**阶段 5 root-cause 脱离 `update`**（独立 CLI，默认 `--checker comprehensive` 多信号综合 + Agent 补充深挖）。
 
 | 阶段 | 目录 / 文件 | CLI | 产出 |
 |:--:|-------------|-----|------|
@@ -25,11 +25,11 @@ description: |
 | **2 collect** | `workflow/perf-collect.md` | `perf` / `prepare` | `reports/<ts>/<用例>/report/` 全套分析器产物 |
 | **3 gen-perf-report（可选）** | `workflow/gen-perf-report.md` | **`update --so_dir`** | **符号恢复**：用户明确要求，或需要符号级热点/火焰图 stripped 时执行；否则**跳过** |
 | **4 analysis** | `analysis/README.md` → 子 Skill | **读 `report/` / SQL** | SO/符号/帧/线程/IPC/内存高负载热点、动静交叉、新发现 |
-| **5 root-cause** | `root-cause/empty-frame.md` | **独立 `root-cause`** + Agent | `root_cause.md`（空刷）+ Agent 全面根因（不限空刷） |
+| **5 root-cause** | `root-cause/comprehensive.md` | **独立 `root-cause`** + Agent 补充深挖 | `root_cause.md`（多信号综合）+ Agent 源码级补充 |
 | **6 deliver** | `report/analysis-deliverable.md` | — | `reports/hapray-analysis-*.md`（高负载分析报告，融合根因） |
 
 ```text
-§0 → 1 setup → 2 perf-collect → [3 gen-perf-report 可选符号恢复] → 4 analysis(读 report/) → 5 root-cause(独立·全面) → 6 analysis-deliverable
+§0 → 1 setup → 2 perf-collect → [3 gen-perf-report 可选符号恢复] → 4 analysis(读 report/) → 5 root-cause(独立·多信号综合) → 6 analysis-deliverable
 ```
 
 > 默认链路跳过阶段 3：`1 → 2 → 4 → 5 → 6`。仅当需要符号级热点（或火焰图 stripped）时才插入阶段 3 `update --so_dir`，完成后回到阶段 4 补符号级分析。
@@ -100,7 +100,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
    - 2 collect → [perf-collect](workflow/perf-collect.md)
    - 3 gen-perf-report → [gen-perf-report](workflow/gen-perf-report.md)（仅按需符号恢复，未提则跳过）
    - 4 analysis → [analysis/README](analysis/README.md) + 触发的子 Skill（默认 [high-load](analysis/high-load-analysis.md)）
-   - 5 root-cause → [root-cause/empty-frame](root-cause/empty-frame.md)
+   - 5 root-cause → [root-cause/comprehensive](root-cause/comprehensive.md)
    - 6 deliver → [report/analysis-deliverable](report/analysis-deliverable.md)
 
 ---
@@ -181,8 +181,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 2 | 2 | perf-collect（产出 `report/` 全套分析器数据） |
 | 3 | 3 | **仅按需** gen-perf-report：符号恢复 `update --so_dir`（要符号级热点 / 火焰图 stripped 时）；未提则**跳过** |
 | 4 | 4 | analysis：**读 `report/`** 做 high-load 分析（默认主线，不跑 update） |
-| 5 | 5 | root-cause：独立 `root-cause` CLI（空刷）+ Agent 全面根因（借源码） |
-| 6 | 6 | analysis-deliverable 落盘（融合空刷 + 全面根因） |
+| 5 | 5 | root-cause：独立 `root-cause` CLI（多信号综合）+ Agent 补充深挖（借源码） |
+| 6 | 6 | analysis-deliverable 落盘（融合 CLI 根因 + Agent 补充） |
 
 ### 状态机
 
@@ -223,7 +223,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 ## §4 分析模式
 
 - **Quick**：采集 + analysis（至少一个子 Skill，默认 high-load）+ 阶段 6 报告  
-- **Full**：analysis 三项逐一评估 + 阶段 5 全面 root-cause（空刷 + 其余高负载问题）  
+- **Full**：analysis 三项逐一评估 + 阶段 5 多信号综合 root-cause（CLI + Agent 补充深挖）  
 
 ---
 
@@ -237,14 +237,14 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | `trace.db` + 滑动/掉帧 | scroll-jank |
 | `libxxx.so+0x...`（需符号级） | symbol-recovery（触发可选阶段 3 `update --so_dir`） |
 
-**阶段 5 root-cause**：见 [`root-cause/empty-frame.md`](root-cause/empty-frame.md)（独立 CLI + Agent 全面根因，不限空刷）。
+**阶段 5 root-cause**：见 [`root-cause/comprehensive.md`](root-cause/comprehensive.md)（独立 CLI 多信号综合 + Agent 补充深挖）。
 
 ---
 
-## §6 root-cause（阶段 5，独立·全面）
+## §6 root-cause（阶段 5，独立·多信号综合）
 
-权威文档：[`root-cause/empty-frame.md`](root-cause/empty-frame.md)。  
-**脱离 `update`**：空刷走独立 `root-cause` CLI；其余高负载问题（SO/符号热点、高负载帧、冗余线程、IPC、内存）由 Agent 结合阶段 4 发现 + 源码逐类做源码级定位。空刷 CLI 结论作为其中一项证据融合进最终报告。
+权威文档：[`root-cause/comprehensive.md`](root-cause/comprehensive.md)。  
+**脱离 `update`**：走独立 `root-cause` CLI（默认 `--checker comprehensive`，覆盖空刷/CPU热点/帧负载/线程/IPC/SO/内存/组件复用等全部信号）；CLI 覆盖不到的源码级深挖由 Agent 结合阶段 4 发现 + 源码逐类补充定位。CLI 结论与 Agent 补充融合进最终报告。
 
 ---
 
@@ -258,7 +258,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 采集 | workflow/perf-collect |
 | 可选符号恢复 | workflow/gen-perf-report |
 | 高负载挖掘（阶段 4 主线） | analysis/* |
-| 全面 root-cause（阶段 5，独立） | root-cause/empty-frame |
+| 多信号综合 root-cause（阶段 5，独立） | root-cause/comprehensive |
 | Agent 交付 | report/analysis-deliverable |
 
 ---
@@ -267,7 +267,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 > 前置：`path_prompt_done=true` 且 `skill_read_done=true`。
 
-§0 → Read 阶段 doc → 1 setup → 2 collect（产出 `report/`）→ [3 仅按需符号恢复 `update --so_dir`] → 4 analysis **读 `report/` 做 high-load 分析**（`hapray-tool-result.json` 取 `reports_path`；默认不跑 update）→ 5 root-cause（独立 CLI 空刷 + Agent 全面根因，借源码）→ 6 [`analysis-deliverable`](report/analysis-deliverable.md) 落盘（**融合空刷 + 全面根因**）。
+§0 → Read 阶段 doc → 1 setup → 2 collect（产出 `report/`）→ [3 仅按需符号恢复 `update --so_dir`] → 4 analysis **读 `report/` 做 high-load 分析**（`hapray-tool-result.json` 取 `reports_path`；默认不跑 update）→ 5 root-cause（独立 CLI 多信号综合 + Agent 补充深挖，借源码）→ 6 [`analysis-deliverable`](report/analysis-deliverable.md) 落盘（**融合 CLI 根因 + Agent 补充**）。
 
 ---
 
@@ -279,7 +279,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 无预设用例 | 写脚本 + prepare → perf |
 | 缺 trace 等 | 子 Skill 跳过 + 补采命令 |
 | 火焰图热点为 stripped 地址 | 阶段 3 按需 `update --so_dir`；否则标注「建议符号恢复」，SO/帧/线程级照常 |
-| 无源码（root-cause） | root-cause 降级为 analyze（仅证据无行号）或仅做 perf 产物级根因 |
+| 无源码（root-cause） | root-cause 降级为 analyze（仅证据无行号）或仅做 perf 产物级根因；空刷等可选信号缺失时 CLI 自动跳过该信号 |
 | `result-file` 损坏 | 仅证据报告 |
 
 ---
@@ -334,16 +334,17 @@ uv run python -m scripts.main update \
 sqlite3 <用例>/hiperf/step5/perf.db "PRAGMA table_info(perf_sample)"
 ```
 
-### 阶段 5 root-cause（独立，**脱离 update**）
+### 阶段 5 root-cause（独立，**脱离 update**，多信号综合）
 
 ```bash
-# 空刷专项（独立 CLI）：--source-dir 提供 §0 源码路径以启用 with_source 行级根因
+# 多信号综合分析（默认 --checker comprehensive）：--source-dir 提供 §0 源码路径以启用 with_source 行级根因
 uv run python -m scripts.main root-cause \
   --report-dir <用例>/report \
   --source-dir "<§0_源码>" \
   [--index-dir "<§0_源码>/index"]
 # 仅证据（不调 LLM）：追加 --skip-llm
-# 其余高负载问题的全面根因由 Agent 结合阶段 4 发现 + 源码逐类定位（见 root-cause/empty-frame.md）
+# 精选信号类别：追加 --categories cpu-hotspot,empty-frame,thread
+# CLI 覆盖不到的源码级深挖由 Agent 补充（见 root-cause/comprehensive.md §〇.2）
 ```
 
 ### 二进制轨（采集）
@@ -375,9 +376,11 @@ uv run python -m scripts.main update --report_dir ./reports/<timestamp> [--so_di
 - 跳过 `ensure-workspace-layout.sh` 直接 `perf`/`update`（macOS 必炸到主目录）  
 - 用例只写在 Release 包 `_internal/` 或 `<REPO_ROOT>` 而不落盘 `<PROJECT_ROOT>/testcases/`  
 - 无预设时默认 gui-agent / `perf --manual`  
-- **未提符号恢复却默认跑 `update`**（perf 后应先读 `report/` 做高负载分析）；**把 root-cause 绑死在 `update` 上**（应走独立 `root-cause` CLI + Agent 全面根因）  
+- **未提符号恢复却默认跑 `update`**（perf 后应先读 `report/` 做高负载分析）；**把 root-cause 绑死在 `update` 上**（应走独立 `root-cause` CLI（默认 `--checker comprehensive`）+ Agent 补充深挖）  
 - **符号恢复重复执行**：`update --so_dir` 已自动触发完整符号恢复，**禁止**再手动执行 `symbol-recovery.exe`（使用 `AwaitShell` 等待完成即可）  
 - 符号恢复确需执行时无故 `--symbol-recovery-no-llm`；伪交付 / 虚构数据  
+- **`perf` 已成功产出 `report/summary.json` 后重复执行 `perf`**（须先检查已有报告是否存在，存在则直接进阶段4，禁止重跑）
+- **脚本步骤不验证操作是否生效**：关键 UI 操作（展开播放器、切换页面、弹出面板等）发完指令就继续，不验证目标界面是否真正出现；**必须在 `prepare` 阶段逐步验证**，未生效则修正脚本，禁止带缺陷脚本进入 `perf`
 
 ---
 

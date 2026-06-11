@@ -1,5 +1,5 @@
 > 主 Skill 路由：[`SKILL.md`](../SKILL.md) 阶段 6  
-> 前置：阶段 4 [`analysis/`](../analysis/README.md) high-load 线索（读 `report/`，**不依赖 update**）；阶段 5 [`root-cause/empty-frame`](../root-cause/empty-frame.md) 的空刷 `root_cause.md`（A）+ Agent 全面根因（B）。可选阶段 3 符号恢复产物（如有）。
+> 前置：阶段 4 [`analysis/`](../analysis/README.md) high-load 线索（读 `report/`，**不依赖 update**）；阶段 5 [`root-cause/comprehensive`](../root-cause/comprehensive.md) 的多信号综合 `root_cause.md`（CLI 自动分析）+ Agent 补充深挖。可选阶段 3 符号恢复产物（如有）。
 
 # Agent 分析交付报告（高负载分析报告，analysis-deliverable）
 
@@ -30,13 +30,13 @@ reports/hapray-analysis-20260601-saltplayer-load-comparison.md
 | 条件 | 动作 |
 |------|------|
 | 阶段4 high-load 已完成 | 报告主体（步骤指标、符号/帧/线程/IPC 热点）来自 high-load 真实产物，**非** `summary.json` 复述 |
-| 存在 `trace_emptyFrame.json` 且做了空刷根因 | Read `<用例>/report/root_cause.md`，将空刷 Top Suspects **融合**进第三章（与 B 全面根因统一排序） |
-| `root_cause.md` 含 `Pending Agent Inference` | **禁止**写阶段 6；先按 [`empty-frame.md`](../root-cause/empty-frame.md) §〇.3 完成 Agent 闭环 |
-| Agent 全面根因（B）已对非空刷高负载问题做源码级定位 | 各条作为独立根因条目进入第三章三段式 |
-| 用户 §0 跳过源码 / 无空刷 | root-cause 降级（仅证据无行号 / 仅 perf 产物级）；在「未覆盖项」说明 |
+| 存在 `root_cause.md` | Read `<用例>/report/root_cause.md`，将 Top Suspects **融合**进第三章（与 Agent 补充深挖统一排序） |
+| `root_cause.md` 含 `Pending Agent Inference` | **禁止**写阶段 6；先按 [`comprehensive.md`](../root-cause/comprehensive.md) §一.3 完成 Agent 闭环 |
+| Agent 补充深挖已对 CLI 未达源码级的条目做定位 | 各条作为独立根因条目进入第三章三段式 |
+| 用户 §0 跳过源码 / 无可用信号产物 | root-cause 降级（仅证据无行号 / 仅 perf 产物级）；在「未覆盖项」说明 |
 
 ```text
-阶段 4 high-load → 阶段 5 root-cause（A 空刷 + B 全面）→ 阶段 6 落盘融合
+阶段 4 high-load → 阶段 5 root-cause（CLI 多信号综合 + Agent 补充深挖）→ 阶段 6 落盘融合
 ```
 
 ---
@@ -406,15 +406,15 @@ post 报告在 pre 报告基础上增加以下内容：
 
 ---
 
-## §根因内容融合规范（A 空刷 + B 全面）
+## §根因内容融合规范（CLI 根因 + Agent 补充深挖）
 
-**位置**：所有根因（空刷 A + 全面 B）融合到 **第三章「根因分析与源码定位」**，按 P0/P1/P2/P3 **统一排序**，不为空刷单独成章。
+**位置**：所有根因（CLI 自动分析 + Agent 补充深挖）融合到 **第三章「根因分析与源码定位」**，按 P0/P1/P2/P3 **统一排序**，不为任何信号类别单独成章。
 
 **内容要求（MUST）**：
 
-1. **A 空刷**：**Read** 磁盘上的 `root_cause.md`（禁止凭记忆缩写），将 Top Suspects 按置信度映射：HIGH→P0、MED→P1、LOW→P2/P3；每条「HapRay 证据」引用其具体数据（空刷帧数、嫌疑排名、触发链路）；Caveats → 融入「未覆盖项」。
-2. **B 全面**：阶段4 high-load 挖出的非空刷高负载问题（SO/符号热点、高负载帧、冗余线程、IPC、内存、组件复用），每条由 Agent 借源码定位后作为**独立根因条目**进入第三章三段式，与 A 一起按优先级排序。
-3. A 与 B **去重合并**：若某空刷嫌疑与某高负载热点指向同一源码点，合并为一条，证据取两侧并集。
+1. **CLI 根因**：**Read** 磁盘上的 `root_cause.md`（禁止凭记忆缩写），将 Top Suspects 按置信度映射：HIGH→P0、MED→P1、LOW→P2/P3；每条「HapRay 证据」引用其具体数据（空刷帧数、CPU热点指令数、IPC QPS、组件复用率等）；Caveats → 融入「未覆盖项」。
+2. **Agent 补充深挖**：对 CLI 报告中未达源码级定位的条目（无 `文件:行号` 引用），Agent 借 §0 源码逐类追查后作为**独立根因条目**进入第三章三段式，与 CLI 结论一起按优先级排序。阶段4 high-load 挖出但 CLI 未覆盖的线索也应补充。
+3. CLI 与 Agent 补充**去重合并**：若某 CLI suspect 与某 Agent 追查结论指向同一源码点，合并为一条，证据取两侧并集。
 
 **禁止**：
 
@@ -422,7 +422,8 @@ post 报告在 pre 报告基础上增加以下内容：
 - 阶段 5 未完成却声称根因已分析
 - 融合内容与 `root_cause.md` 不一致（若需补充 Agent 解读，写在结论分级，不覆盖根因正文）
 - 将 root_cause.md 全文机械复制为独立章节（必须融合到 §三 的三段式结构中）
-- 只写空刷（A）而遗漏阶段4挖出的其余高负载根因（B）
+- 只复述 CLI 报告而遗漏 Agent 补充深挖（反之亦然）
+- 有 `root_cause.md` 却未引用其 suspect 数据就声称根因已完成
 
 ---
 
@@ -434,7 +435,7 @@ post 报告在 pre 报告基础上增加以下内容：
 | `path_prompt_done` | §0 路径门禁完成 |
 | `skill_read_done` | 已 Read 主 SKILL + 当前阶段文档 |
 | `path_prompt_state` | `waiting_source` / `waiting_so` / `waiting_confirm` / `done` |
-| `app_packages_dir_user` | 空刷根因输入 → `--app-packages-dir`（见 [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)） |
+| `app_packages_dir_user` | 根因输入 → `--app-packages-dir`（见 [`root-cause/comprehensive.md`](../root-cause/comprehensive.md)） |
 | `so_dir_user` | 符号恢复 SO → `--so_dir` |
 | `collection_mode` | `predefined` / `agent-authored` / `gui-agent` |
 | `ui_mapping_mode` | `id` / `text` / `coordinate-only` |
@@ -450,10 +451,10 @@ post 报告在 pre 报告基础上增加以下内容：
 |------|-------------------|
 | 3（可选）符号恢复 | 增强火焰图符号级热点 → §四（未做则标注「建议符号恢复」） |
 | 4 analysis high-load | `report/` 真实产物（`summary.json` 步骤指标、`more_flame_graph.json`/`perf.db` 符号-SO 热点、`trace_*.json` 帧/IPC/复用、`redundant_thread_analysis.json`、`memory_report.xlsx`）→ 步骤指标 §二、热点 §四、新发现融入 §三 |
-| 5 root-cause（A 空刷） | `root_cause.md` 的 Top Suspects → 融入 §三 HapRay 证据段；Caveats → 未覆盖项 |
-| 5 root-cause（B 全面） | 非空刷高负载问题的源码级根因 → §三 独立条目，与 A 统一排序 |
+| 5 root-cause（CLI 多信号综合） | `root_cause.md` 的 Top Suspects（含全部信号：空刷/CPU热点/帧负载/线程/IPC/SO/内存/组件复用）→ 融入 §三 HapRay 证据段；Caveats → 未覆盖项 |
+| 5 root-cause（Agent 补充深挖） | CLI 未达源码级的条目之源码级根因 → §三 独立条目，与 CLI 结论统一排序 |
 
-**禁止**：无证据的伪分析；仅复述 HTML 而无阶段4挖掘；有空刷却未引用 `root_cause.md` 数据却声称完成根因分析；只写空刷而遗漏阶段4其余高负载根因（B）。
+**禁止**：无证据的伪分析；仅复述 HTML 而无阶段4挖掘；有 `root_cause.md` 却未引用其 suspect 数据却声称完成根因分析；只复述 CLI 报告而遗漏 Agent 补充深挖。
 
 ---
 
@@ -464,7 +465,7 @@ post 报告在 pre 报告基础上增加以下内容：
 - [ ] comparison 报告包含完整 10 章结构（概述→步骤指标对比→符号热点对比→调用栈对比→逐项评估→帧统计对比→IPC对比→综合结论→后续建议→测试复现）
 - [ ] §三 每条根因包含三段式：HapRay 证据 + 源码根因 + 修复建议
 - [ ] §三 根因数据已融合 root_cause.md 的 Top Suspects 结论（非机械复制全文）
-- [ ] 有空刷时：根因条目引用了 root_cause.md 的具体嫌疑数据和排名
+- [ ] 有 root_cause.md 时：根因条目引用了 root_cause.md 的具体 suspect 数据和信号类别
 - [ ] 交付报告中 **无**「Pending Agent Inference」
 - [ ] 优化建议与根因分析一致（comparison 报告中逐项评估与 §三 根因对应）
 - [ ] 双轮测试产出 3 份独立报告（pre / post / comparison），每份可独立阅读

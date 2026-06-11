@@ -350,6 +350,18 @@ LIMIT 20;
 | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | **帧与手势**的权威规则与 SQL；帧级指令数与帧结论须保持一致 |
 | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 当热点函数为 `[unknown]`/stripped 时**必须先执行**，再回到本文分析 |
 | [`../schemas/hapray-tool-result.md`](../schemas/hapray-tool-result.md) | 定位 `reports_path` 与契约字段 |
+| [`../root-cause/comprehensive.md`](../root-cause/comprehensive.md) | 阶段5 根因分析；CLI 的 `signal_extractors` 会独立读取同一原始产物，Agent 做补充深挖时应**优先引用阶段4已挖出的线索**，避免重复 |
+
+### 与阶段5的分工
+
+| 维度 | 阶段4（本 Skill） | 阶段5 root-cause |
+|------|------------------|------------------|
+| 目标 | 发现线索与假设 | 确认根因 + 源码级定位 |
+| 手段 | Agent 手动 SQL + 数据探索 | CLI 自动多信号提取 + LLM/Agent 推断 |
+| 产出 | 高负载热点表 + 新发现 | `root_cause.md` + Agent 源码级补充 |
+| 数据源 | 同一原始产物（`report/`） | CLI 独立提取，不依赖阶段4产出 |
+
+**注意**：阶段5 CLI 的 `signal_extractors`（`CpuHotspotEvidenceExtractor` 等）与本 Skill 的 §四.3 SQL 查询覆盖类似的数据源，但分析深度和产出格式不同。本 Skill 侧重**人工发现与验证**，CLI 侧重**自动推断**。Agent 在阶段5做补充深挖时，应引用本阶段的发现而非从零重做。
 
 ---
 

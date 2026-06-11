@@ -33,6 +33,14 @@ def scene_report_dir(case_dir: str) -> Path:
 
 
 def trace_empty_frame_available(case_dir: str) -> bool:
+    """Check whether trace_emptyFrame.json exists.
+
+    NOTE: This is **not** a gate for root-cause analysis.  The default
+    ``--checker comprehensive`` covers all signals; empty-frame is merely
+    one optional signal among many.  A missing trace_emptyFrame.json only
+    means the empty-frame signal will be skipped inside
+    ``run_comprehensive_analysis``.
+    """
     p = scene_report_dir(case_dir) / 'trace_emptyFrame.json'
     return p.is_file()
 
@@ -62,9 +70,10 @@ def run_root_cause_for_case(
     if not report_sub.is_dir():
         logger.info('Root-cause skipped for %s: no report directory', case_dir)
         return False
+    # empty-frame is one optional signal; comprehensive analysis proceeds
+    # regardless of whether trace_emptyFrame.json exists.
     if not trace_empty_frame_available(case_dir):
-        # 空刷已降为可选信号；无 trace_emptyFrame.json 仍可做其余高负载信号的全面根因。
-        logger.info('Root-cause for %s: no trace_emptyFrame.json; empty-frame is optional, continuing comprehensive.', case_dir)
+        logger.info('Root-cause for %s: no trace_emptyFrame.json; empty-frame signal skipped, continuing comprehensive.', case_dir)
 
     output_md = report_sub / 'root_cause.md'
     pkg_root = bundle_packages_dir(report_dir, bundle_name)
@@ -129,7 +138,11 @@ def run_root_cause_for_case(
 
     if (
         output_md.is_file()
-        and 'Pending Agent Inference' in output_md.read_text(encoding='utf-8', errors='replace')
+        and (
+            'Pending Agent Inference' in output_md.read_text(encoding='utf-8', errors='replace')
+            or (report_sub / 'root_cause_agent_task.json').is_file()
+            or (report_sub / 'root_cause_pending.json').is_file()
+        )
         and apply_agent_result_to_report(report_sub)
     ):
         logger.info('Root-cause report finalized from agent result for %s', case_dir)
@@ -149,7 +162,7 @@ def root_cause_payload_for_result(case_dir: str) -> Optional[dict[str, Any]]:
         markdown = md_path.read_text(encoding='utf-8', errors='replace')
     except OSError:
         return None
-    pending_agent = 'Pending Agent Inference' in markdown or agent_task.is_file()
+    pending_agent = ('Pending Agent Inference' in markdown) or agent_task.is_file() or (scene_report_dir(case_dir) / 'root_cause_pending.json').is_file()
     return {
         'markdown': markdown,
         'markdown_path': 'root_cause.md',

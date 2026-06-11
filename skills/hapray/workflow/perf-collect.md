@@ -164,7 +164,13 @@ def _tap_bounds_center(self, bounds_str: str, wait_seconds: float = 2):
   - **采集中勿中途退应用**：`execute_performance_step` 内禁止 `stop_app`、Home/`swipe_to_home`、会退出应用的 `swipe_to_back`、切其他包。  
   - **结束由 `teardown()` 退出**：勿在业务末步再写 `stop_app`；框架会在用例结束时退出应用。  
   - **勿做冷启动专测**：除非用户明确要求，禁止 `reboot_device`、步骤名「冷启动」、仅采冷启一条路径。  
-- 控件操作：**先按 §7.1.5 的 `ui_mapping_mode` 选型**——`coordinate-only` → 仅 `touch_by_coordinates`（+ `source_screen_*`）；`id`/`text` 模式才用 `touch_by_id` / `touch_by_text`；有源码时文案/路由仍须与源码或 Inspector 一致。  
+- 控件操作：**先按 §7.1.5 的 `ui_mapping_mode` 选型**——`coordinate-only` → 仅 `touch_by_coordinates`（+ `source_screen_*`）；`id`/`text` 模式才用 `touch_by_id` / `touch_by_text`；有源码时文案/路由仍须与源码或 Inspector 一致。
+- **步骤操作验证（MUST，自写脚本核心要求）**：脚本中每个 UI 操作（点击、滑动、手势等）**不能假设一定生效**。对于改变界面状态的关键操作（如：展开播放器、切换 Tab、弹出面板），**必须在脚本中验证操作结果**，而非发完指令就继续。验证方式：
+  - **dump Inspector 快照**：操作后 `uitest dumpLayout`，解析 JSON 确认目标 UI 元素是否出现（如播放器页面的封面图、控制按钮）
+  - **AppStorage / 属性断言**（若框架支持）
+  - **截图对比**：操作前后截图，确认界面发生了预期变化
+  - 至少在 `prepare` 试跑阶段做一次完整验证；若操作未生效，**必须修正坐标/手势参数后重跑 `prepare`**，禁止跳过验证就进入 `perf`
+  - **典型反例（禁止）**：swipe 上拉手势假设「全屏播放器已打开」，但实际手势速度/距离不够导致没打开，脚本却继续在错误界面上执行后续点击
 - **长等待须保持亮屏（MUST）**：perf 采集期间息屏会导致 trace/操作无效。脚本中凡 **单次 `time.sleep` / `driver.wait` ≥ 5 秒**，或 `execute_performance_step` 内连续等待较长时，须避免长时间黑屏：
   - 等待前调用：`self.driver.wake_up_display()`
   - 等待 **≥ 15 秒** 时：拆成多段 sleep（建议每 **≤ 10 秒** 一段），**每段前** `self.driver.wake_up_display()`，或封装为本用例内的 `_wait_keep_screen_on(seconds)`（内部循环 wake + sleep）
@@ -296,6 +302,8 @@ uv run python -m scripts.main perf \
 - `perf` 仍失败：结合 `prepare` / `perf` 日志修正脚本后，须重跑 `prepare` 通过再 `perf`。  
 - 随后**读 `<用例>/report/`** 进入阶段4 高负载分析（**默认不跑 `update`**；符号恢复按需）。`collection_mode=agent-authored`。
 
+> **⛔ 禁止重复执行 `perf`**：`perf` 执行成功并产出 `report/` 后，**绝对禁止**再次执行同一用例的 `perf` 命令。重复执行会覆盖已有报告、浪费采集时间，且在用户看来是严重失误。执行 `perf` 前 **MUST** 先检查 `reports/<timestamp>/<用例>/report/summary.json` 是否已存在；若存在则直接进入阶段4 读报告，不得重跑。
+
 > **二进制轨**：用例写在 `<PROJECT_ROOT>/testcases/` → `sync-testcases-to-runtime.sh` → `prepare` 通过 → `perf`（产出 `report/`）→ 读 `report/` 高负载分析。**禁止**默认 `gui-agent`；符号恢复按需 `update -r <PROJECT_ROOT>/reports/<timestamp> --so_dir ...`。
 
 ### `gui-agent` 触发条件（仅优先级 3）
@@ -314,6 +322,6 @@ uv run python -m scripts.main perf \
 
 - `perf` 或 `gui-agent` 产出报告目录后，**直接读 `<用例>/report/`**（已含 `summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json` 等）进入 **阶段4 高负载分析**（见 [analysis/README.md](../analysis/README.md)）。**默认不跑 `update`**。
 - **符号恢复（阶段3，按需）**：仅当需要符号级热点或火焰图为 stripped 地址时，执行 `update --so_dir`（见 [gen-perf-report.md](gen-perf-report.md)）。
-- **root-cause（阶段5，独立）**：空刷与全面根因走独立 `root-cause` CLI + Agent，携带 §0 的 `--source-dir`（见 [empty-frame.md](../root-cause/empty-frame.md)）。
+- **root-cause（阶段5，独立）**：多信号综合根因走独立 `root-cause` CLI（默认 `--checker comprehensive`）+ Agent 补充深挖，携带 §0 的 `--source-dir`（见 [comprehensive.md](../root-cause/comprehensive.md)）。
 
 ---
