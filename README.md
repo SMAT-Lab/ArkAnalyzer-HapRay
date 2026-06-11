@@ -227,7 +227,7 @@ Options:
 - `--api-key / --base-url / --model`: 旧版单次覆盖入口；推荐使用统一 `.env` / 环境变量
 - `HAPRAY_ROOT_CAUSE_EXECUTION`: `agent`（默认）/ `api` / `auto`
 - `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）
-- `--skip-llm`: 跳过 LLM，`root_cause.md` 内容与 `root_cause_evidence.md` 相同
+- `--skip-llm`: 跳过 LLM，`root_cause.md` 为结构化摘要 + Pending Agent Inference 占位符（与 `root_cause_evidence.md` 原始证据不同）
 
 详细说明参见 [`skills/hapray/root-cause/empty-frame.md`](skills/hapray/root-cause/empty-frame.md)。
 

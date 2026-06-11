@@ -497,6 +497,101 @@ def _render_agent_result(
     return render_fallback_markdown(result)
 
 
+def _render_skip_llm_report(
+    context_text: str,
+    sections: dict[str, Any] | None = None,
+    evidence_report: str = '',
+    checker: str = 'empty-frame',
+) -> str:
+    """Render a structured placeholder for root_cause.md when --skip-llm is used.
+
+    Unlike the evidence report (which dumps all raw JSON), this template
+    provides a concise summary per signal category and marks each as
+    "Pending Agent Inference", guiding the Agent to complete the analysis.
+    """
+    lines: list[str] = [
+        '# Root Cause Analysis (Pending Agent Inference)',
+        '',
+        '> 本报告由 HapRay 规则引擎自动生成，未经过 LLM/Agent 推断。',
+        '> 各信号类别的根因推断标记为 **Pending Agent Inference**，需要 Agent 补充深挖。',
+        '> 完整原始证据见同目录 `root_cause_evidence.md`。',
+        '',
+    ]
+
+    lines.append('## 性能摘要')
+    lines.append(context_text)
+    lines.append('')
+
+    if sections:
+        lines.append('## 信号概要与待推断项')
+        lines.append('')
+        for cat, sec in sections.items():
+            label = CATEGORY_LABELS.get(cat, cat)
+            kind = sec.get('kind', '')
+            kind_label = 'suspect' if kind == 'suspect' else 'observation'
+            summary = sec.get('summary')
+            items = sec.get('items') or []
+
+            lines.append(f'### [{kind_label}] {label}')
+            lines.append('')
+
+            if cat == 'empty-frame' and isinstance(summary, dict):
+                total = summary.get('total_empty_frames', '?')
+                pct = summary.get('empty_frame_percentage', '?')
+                sev = summary.get('severity_level', '?')
+                lines.append(f'- 空刷总数: {total}，占比: {pct}%，严重程度: {sev}')
+            elif cat == 'component-reuse' and isinstance(summary, dict):
+                per_step = summary.get('per_step', [])
+                total_builds = sum(s.get('total_builds', 0) for s in per_step)
+                total_recycled = sum(s.get('recycled_builds', 0) for s in per_step)
+                max_comp = ''
+                for s in per_step:
+                    if s.get('max_component'):
+                        max_comp = s['max_component']
+                        break
+                lines.append(f'- 总构建: {total_builds}，总回收: {total_recycled}，复用率: {0 if total_builds == 0 else total_recycled / total_builds:.2%}')
+                if max_comp:
+                    lines.append(f'- 最高构建组件: {max_comp}')
+            elif cat == 'frame-load' and isinstance(summary, dict):
+                per_step = summary.get('per_step', [])
+                if per_step:
+                    heaviest = max(per_step, key=lambda s: s.get('average_load', 0))
+                    lines.append(
+                        f'- 最重步骤: {heaviest.get("step", "?")}，'
+                        f'平均负载: {heaviest.get("average_load", 0):.0f}，'
+                        f'高负载帧: {heaviest.get("high_load_frames", "?")}/{heaviest.get("total_frames", "?")}'
+                    )
+            elif cat == 'thread' and isinstance(summary, dict):
+                has = summary.get('has_redundancy', False)
+                lines.append(f'- 冗余线程: {"是" if has else "无"}')
+            elif cat == 'ipc' and isinstance(summary, dict):
+                lines.append(f'- 注: {summary.get("note", "")}')
+            elif cat == 'so-load' and isinstance(summary, dict):
+                total = summary.get('total_so_load', 0)
+                lines.append(f'- SO 总负载: {total:,} 指令')
+            elif cat == 'ui-animate' and items:
+                pass
+            elif isinstance(summary, dict):
+                keys = [k for k in summary if k not in ('per_step',)]
+                if keys:
+                    lines.append(f'- 关键指标: {", ".join(keys[:5])}')
+
+            if items:
+                lines.append(f'- 明细条目数: {len(items)}')
+
+            lines.append('')
+            lines.append(f'**Pending Agent Inference** — 需要 Agent 基于上述证据推断根因、定位源码、给出修复建议。')
+            lines.append('')
+    else:
+        lines.append('## Pending Agent Inference')
+        lines.append('')
+        lines.append('未提供结构化信号数据。请 Agent 读取 `root_cause_evidence.md` 中的完整证据，')
+        lines.append('推断根因、定位源码、给出修复建议。')
+        lines.append('')
+
+    return '\n'.join(lines).strip() + '\n'
+
+
 def _render_agent_pending_report(task_path: Path, result_path: Path, evidence_report: str) -> str:
     return (
         '# Root Cause Analysis Pending Agent Inference\n\n'
@@ -894,7 +989,17 @@ def run_empty_frame_analysis(
             )
 
     if final_report is None:
-        final_report = evidence_report  # explicit --skip-llm or failed remote/API path
+        final_report = _render_skip_llm_report(
+            context_text=enriched_context,
+            sections={'empty-frame': {
+                'category': 'empty-frame',
+                'kind': 'suspect',
+                'summary': evidence.get('overview', {}),
+                'items': evidence.get('proc_source_hints', []),
+            }},
+            evidence_report=evidence_report,
+            checker='empty-frame',
+        )
 
     # 8. Write outputs
     output = Path(output_path)
@@ -903,6 +1008,17 @@ def run_empty_frame_analysis(
     evidence_path = output.parent / (output.stem + '_evidence.md')
     evidence_path.write_text(evidence_report, encoding='utf-8')
     output.write_text(final_report, encoding='utf-8')
+
+    # Write a structured pending marker when the report is pending agent inference.
+    # This is more robust than string-matching the markdown content.
+    pending_marker = output.parent / 'root_cause_pending.json'
+    if 'Pending Agent Inference' in final_report:
+        pending_marker.write_text(
+            json.dumps({'pending': True, 'report': str(output), 'checker': 'empty-frame'}, ensure_ascii=False),
+            encoding='utf-8',
+        )
+    elif pending_marker.is_file():
+        pending_marker.unlink()
 
     logging.info('Root cause analysis complete: %s', output_path)
     return final_report
@@ -1152,18 +1268,37 @@ def run_comprehensive_analysis(
             )
 
     if final_report is None:
-        final_report = evidence_report  # --skip-llm 或 API 失败
+        final_report = _render_skip_llm_report(
+            context_text=context_text,
+            sections=sections,
+            evidence_report=evidence_report,
+            checker='comprehensive',
+        )
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     (output.parent / (output.stem + '_evidence.md')).write_text(evidence_report, encoding='utf-8')
     output.write_text(final_report, encoding='utf-8')
+
+    # Write / clear structured pending marker
+    pending_marker = output.parent / 'root_cause_pending.json'
+    if 'Pending Agent Inference' in final_report:
+        pending_marker.write_text(
+            json.dumps({'pending': True, 'report': str(output), 'checker': 'comprehensive'}, ensure_ascii=False),
+            encoding='utf-8',
+        )
+    elif pending_marker.is_file():
+        pending_marker.unlink()
+
     logging.info('Comprehensive root cause analysis complete: %s', output_path)
     return final_report
 
 
 def apply_agent_result_to_report(report_dir: str | Path) -> bool:
-    """若已有 ``root_cause_agent_result.json``，渲染并覆盖 ``root_cause.md``。"""
+    """若已有 ``root_cause_agent_result.json``，渲染并覆盖 ``root_cause.md``。
+
+    Also clears the pending marker file if present.
+    """
     report_sub = Path(report_dir)
     output_md = report_sub / 'root_cause.md'
     result_path = report_sub / 'root_cause_agent_result.json'
@@ -1173,6 +1308,13 @@ def apply_agent_result_to_report(report_dir: str | Path) -> bool:
     if not rendered:
         return False
     output_md.write_text(rendered, encoding='utf-8')
+    # Clear pending marker since agent result has been applied
+    pending_marker = report_sub / 'root_cause_pending.json'
+    if pending_marker.is_file():
+        try:
+            pending_marker.unlink()
+        except OSError:
+            pass
     logging.info('Root-cause report refreshed from agent result: %s', output_md)
     return True
 

@@ -137,6 +137,7 @@ class UpdateAction:
 
     @staticmethod
     def _try_recv_remote_dir(remote_dir: str, local_dir: Path) -> bool:
+        local_dir = local_dir.resolve()
         local_dir.parent.mkdir(parents=True, exist_ok=True)
         ok, out = UpdateAction._run_hdc_cmd(['file', 'recv', remote_dir, str(local_dir)], timeout_sec=90)
         if not ok:

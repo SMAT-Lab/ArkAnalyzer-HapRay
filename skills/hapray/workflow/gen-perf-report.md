@@ -1,6 +1,6 @@
 > 主 Skill 路由：[`SKILL.md`](../SKILL.md) **阶段 3（可选符号恢复）**（CLI 为 `update --so_dir`）  
 > 产出：增强火焰图 `hiperf_report_with_inferred_symbols.html`、符号级热点；**仅在需要符号级定位时执行**。  
-> 空刷 / 全面 root-cause → [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)（独立阶段5，不在本文档展开）。
+> 多信号综合 root-cause → [`root-cause/comprehensive.md`](../root-cause/comprehensive.md)（独立阶段5，不在本文档展开）。
 
 # 可选符号恢复（gen-perf-report，阶段 3）
 
@@ -11,7 +11,7 @@
 
 ### 3.1 SO 路径（§0 确认后写入 update）
 
-符号恢复须在 **§0 必问模板** 中索取 **SO 路径**（第 2 项）。第 1 项源码/HAP 路径属 **阶段 5 root-cause** → [`root-cause/empty-frame.md`](../root-cause/empty-frame.md)。
+符号恢复须在 **§0 必问模板** 中索取 **SO 路径**（第 2 项）。第 1 项源码/HAP 路径属 **阶段 5 root-cause** → [`root-cause/comprehensive.md`](../root-cause/comprehensive.md)。
 
 | 用途 | 用户需提供 | CLI | 环境变量 |
 |------|------------|-----|----------|
