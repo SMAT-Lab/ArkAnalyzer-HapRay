@@ -28,7 +28,7 @@ class PerfLoad_xhs_0080(PerfTestCase):
         self.start_app()
         self.touch_by_text('我')
         self.touch_by_text('关注')
-        self.touch_by_text('EDIFIER漫步者')
+        self.touch_by_text('小熊电器')
 
         def step1():
             # 点击进入直播间
@@ -42,7 +42,7 @@ class PerfLoad_xhs_0080(PerfTestCase):
         def step2():
             # 直播间点击购物车，并在购物车商品列表页面上下滑动5次
             # 1. 点击直播间购物车图标，等待1s
-            self.touch_by_coordinates(988, 2290, 1)
+            self.touch_by_coordinates(682, 2304, 1)
 
             # 直播间商品列表上滑下滑
             for _i in range(5):
