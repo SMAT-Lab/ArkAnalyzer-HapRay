@@ -30,9 +30,9 @@ class PerfLoad_kuaishou_0020(PerfTestCase):
         # Step('启动被测应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
-        time.sleep(2)
+        time.sleep(7)
         # 点击搜索框
-        self.driver.touch(self.convert_coordinate(968, 186))
+        self.driver.touch(self.convert_coordinate(990, 186))
         time.sleep(2)
         # 搜索华为手机
         search_coords = self.convert_coordinate(475, 198)

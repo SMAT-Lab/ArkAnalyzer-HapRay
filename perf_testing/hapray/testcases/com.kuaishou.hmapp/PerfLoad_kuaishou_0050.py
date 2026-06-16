@@ -29,7 +29,7 @@ class PerfLoad_kuaishou_0050(PerfTestCase):
 
         # Step('启动被测应用')
         self.driver.start_app(self.app_package)
-        self.driver.wait(5)
+        self.driver.wait(7)
         time.sleep(2)
 
         # 点击中间加号

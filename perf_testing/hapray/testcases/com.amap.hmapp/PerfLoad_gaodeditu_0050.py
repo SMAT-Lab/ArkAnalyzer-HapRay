@@ -1,6 +1,7 @@
 import time
 
 from hypium import BY
+from hypium.model.basic_data_type import UiParam
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -33,7 +34,10 @@ class PerfLoad_gaodeditu_0050(PerfTestCase):
         time.sleep(2)
 
         # 点击搜索框
-        self.driver.touch(self.convert_coordinate(500, 1450))
+        if self.driver.find_component(BY.text('查找地点、公交、地铁')):
+            self.driver.touch(BY.text('查找地点、公交、地铁'))
+        else:
+            self.driver.touch(self.convert_coordinate(500, 1270))
         time.sleep(2)
 
         # 搜索大雁塔北广场
@@ -42,8 +46,15 @@ class PerfLoad_gaodeditu_0050(PerfTestCase):
         time.sleep(2)
 
         # 点击大雁塔北广场路线
-        self.driver.touch(self.convert_coordinate(973, 400))
+        self.driver.touch(self.convert_coordinate(286, 500))
         time.sleep(2)
+        self.driver.touch(BY.text('路线'))
+        time.sleep(2)
+
+        # 切换到驾车
+        if self.driver.find_component(BY.text('驾车')) is None:
+            self.driver.swipe(UiParam.RIGHT, area=BY.type('Scroll'))
+            time.sleep(2)
 
         self.driver.touch(BY.text('驾车'))
         time.sleep(2)

@@ -34,11 +34,16 @@ class PerfLoad_kuaishou_0040(PerfTestCase):
 
         self.driver.touch(BY.text('首页'))
         time.sleep(2)
-        self.driver.touch(BY.text('直播'))
+        # 点击搜索框
+        self.driver.touch(self.convert_coordinate(990, 186))
+        time.sleep(2)
+        self.driver.touch(BY.text('直播榜'))
+        time.sleep(2)
+        self.driver.touch(BY.text('1'))
         time.sleep(2)
         # 点击第一个直播间
-        self.driver.touch(self.convert_coordinate(240, 750))
-        time.sleep(2)
+        #self.driver.touch(self.convert_coordinate(240, 750))
+        #time.sleep(2)
 
         def step1():
             # Step('上滑操作')
