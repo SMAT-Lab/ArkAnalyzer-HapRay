@@ -1,5 +1,6 @@
 from hapray.core.perf_testcase import PerfTestCase
 
+from hypium import BY
 
 class PerfLoad_taobao_0040(PerfTestCase):
     def __init__(self, controllers):
@@ -43,17 +44,17 @@ class PerfLoad_taobao_0040(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         def step3():
-            # Step('逛逛，上滑5次')
+            # Step('我的淘宝，上滑5次')
             self.swipes_up(swip_num=5, sleep=2)
-            # Step('逛逛，下滑5次')
+            # Step('我的淘宝，下滑5次')
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('淘宝-页签切换浏览场景-step1购物车滑动', 30, step1)
         # self.driver.touch(BY.text('视频'))
         self.driver.touch(self.convert_coordinate(328, 2250))
         self.driver.wait(1)
-        # self.driver.touch(BY.text('短剧'))
-        self.driver.touch(self.convert_coordinate(506, 168))
+        self.driver.touch(BY.text('推荐'))
+        # self.driver.touch(self.convert_coordinate(506, 168))
         self.driver.wait(1)
         self.execute_performance_step('淘宝-页签切换浏览场景-step2逛逛页面滑动', 30, step2)
         # self.driver.touch(BY.text('我的淘宝'))

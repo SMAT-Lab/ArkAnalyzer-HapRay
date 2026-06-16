@@ -33,10 +33,11 @@ class PerfLoad_jingdong_0020(PerfTestCase):
 
         # 点击我的
         self.driver.touch(BY.text('我的'))
-        time.sleep(2)
+        time.sleep(5)
 
         # 选择收藏商品
-        self.driver.touch(BY.text('商品收藏'))
+        self.driver.touch(self.convert_coordinate(468, 1205))
+        # self.driver.touch(BY.text('收藏'))
         time.sleep(2)
 
         # 点击收藏页第一个商品

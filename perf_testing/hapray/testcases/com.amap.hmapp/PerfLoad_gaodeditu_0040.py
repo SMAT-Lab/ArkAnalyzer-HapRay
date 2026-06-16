@@ -32,39 +32,44 @@ class PerfLoad_gaodeditu_0040(PerfTestCase):
         self.driver.wait(5)
         time.sleep(2)
 
+        # 点击搜索框
+        if self.driver.find_component(BY.text('查找地点、公交、地铁')):
+            self.driver.touch(BY.text('查找地点、公交、地铁'))
+        else:
+            self.driver.touch(self.convert_coordinate(500, 1270))
+        time.sleep(2)
+
+        search_coords = self.convert_coordinate(475, 198)
+        self.driver.input_text(search_coords, '西安市')
+        time.sleep(2)
+
+        self.driver.touch(BY.text('搜索'))
+        time.sleep(2)
+
+        # self.driver.touch(BY.text('搜周边'))
+        self.driver.touch(self.convert_coordinate(150, 2176))
+
         def step1():
-            self.driver.touch(BY.text('附近'))
-            time.sleep(2)
-            # 点击附近
-            self.driver.touch(self.convert_coordinate(140, 197))
-            time.sleep(2)
-
-            # 搜索大雁塔北广场
-            search_coords = self.convert_coordinate(475, 198)
-            self.driver.input_text(search_coords, '西安市')
-            time.sleep(2)
-
-            self.driver.touch(BY.text('西安市'))
-            time.sleep(2)
-
             self.driver.touch(BY.text('美食'))
-            time.sleep(2)
 
             # Step('上滑操作')
             self.swipes_up(swip_num=5, sleep=2)
             # Step('下滑操作')
             self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step('高德地图-附近美食、酒店页上下滑-step1美食页滑动浏览', 50, step1)
-
-        self.driver.swipe_to_back()
-
+        self.execute_performance_step('高德地图-附近美食、景点页上下滑-step1美食页滑动浏览', 50, step1)
+        for i in range(2):
+            if self.driver.find_component(BY.text('景点')):
+                break
+            else:
+                self.driver.swipe_to_back()
+                time.sleep(2)
         def step2():
-            self.driver.touch(BY.text('酒店'))
+            self.driver.touch(BY.text('景点'))
             time.sleep(2)
             # Step('上滑操作')
             self.swipes_up(swip_num=5, sleep=2)
             # Step('下滑操作')
             self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step('高德地图-附近美食、酒店页上下滑-step2酒店页滑动浏览', 35, step2)
+        self.execute_performance_step('高德地图-附近美食、景点页上下滑-step2景点页滑动浏览', 35, step2)

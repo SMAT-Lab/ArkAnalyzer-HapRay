@@ -1,9 +1,11 @@
+import time
+
 from hypium import BY
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
-class PerfLoad_taobao_0070(PerfTestCase):
+class PerfLoad_taobao_0090(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -22,20 +24,16 @@ class PerfLoad_taobao_0070(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
+    def setup(self):
+        super().setup()
+
+        self.set_device_redundant_mode()
+        self.reboot_device()
+
     def process(self):
-        self.driver.swipe_to_home()
-
-        # Step('启动被测应用')
-        self.driver.start_app(self.app_package)
-        self.driver.wait(5)
-
         def step1():
-            self.driver.touch(BY.text('飞猪'))
-            self.driver.wait(1)
+            self.start_app()
+            time.sleep(5)
+            self.swipe_to_home()
 
-            # Step('飞猪页，上滑5次')
-            self.swipes_up(swip_num=5, sleep=3)
-            # Step('飞猪页，下滑5次')
-            self.swipes_down(swip_num=5, sleep=3)
-
-        self.execute_performance_step('淘宝-飞猪-step1飞猪页面上下滑动', 40, step1)
+        self.execute_performance_step('淘宝-冷启动场景-step1应用冷启动', 10, step1, sample_all_processes=True)
