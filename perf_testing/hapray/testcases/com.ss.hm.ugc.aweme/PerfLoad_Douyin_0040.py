@@ -33,20 +33,29 @@ class PerfLoad_Douyin_0040(PerfTestCase):
         time.sleep(2)
 
         def step1():
+            # 点击热点
+            self.touch_by_text('热点', 5)
+            self.touch_by_text('完整热榜', 5)
+            self.swipes_up(5, 1)
+            self.swipes_down(5, 1)
+
+        def step2():
             # 点击精选
             # self.touch_by_id('home-top-tab-text-homepage_mediumvideo', 2)
             self.touch_by_text('精选', 5)
 
-        def step2():
+        def step3():
             for _i in range(3):
                 # 点击横屏
                 self.touch_by_text('全屏观看', 5)
                 # 返回竖屏
                 self.swipe_to_back(3)
 
-        self.execute_performance_step('抖音-抖音热点页面-点击-页面切换-抖音长视频页面-step1点击长视频', 30, step1)
+        self.execute_performance_step('抖音-抖音热榜-滑动-应用内操作-抖音热榜-step1上下滑动', 30, step1)
+        self.swipe_to_back(3)
+        self.execute_performance_step('抖音-抖音热点页面-点击-页面切换-抖音长视频页面-step1点击长视频', 30, step2)
         # 点击第一个视频
         self.touch_by_coordinates(562, 549, 2)
         self.execute_performance_step(
-            '抖音-视频书评播放页-点击-应用内操作-视频横屏播放页-step2进入横屏，观看10s，返回竖屏', 30, step2
+            '抖音-视频书评播放页-点击-应用内操作-视频横屏播放页-step2进入横屏，观看10s，返回竖屏', 30, step3
         )
