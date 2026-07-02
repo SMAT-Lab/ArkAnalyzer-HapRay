@@ -50,7 +50,7 @@ class PerfLoad_Douyin_0010(PerfTestCase):
         def step2():
             # 点击评论图标，弹出评论界面
             # self.touch_by_text('2.4万', 2)
-            self.touch_by_coordinates(998, 1452, 2)
+            self.touch_by_coordinates(983, 1369, 2)
 
             # 点击空白处，收起评论界面
             self.touch_by_coordinates(500, 576, 2)
@@ -75,14 +75,14 @@ class PerfLoad_Douyin_0010(PerfTestCase):
 
         # 点击评论图标，弹出评论界面, 预先上滑/下滑一轮后再抓取
         # self.touch_by_text('2.4万', 2)
-        self.touch_by_coordinates(998, 1452, 2)
+        self.touch_by_coordinates(983, 1369, 2)
         self.swipes_up(10, 1)
         self.swipes_down(10, 1)
 
         # self.touch_by_text('2.4万', 2)
-        self.touch_by_coordinates(998, 1452, 2)
+        self.touch_by_coordinates(983, 1369, 2)
         self.execute_performance_step('抖音-短视频浏览评论场景-step3评论内容浏览', 40, step3)
 
         # self.touch_by_text('2.4万', 2)
-        self.touch_by_coordinates(998, 1452, 2)
+        self.touch_by_coordinates(983, 1369, 2)
         self.execute_performance_step('抖音-短视频浏览评论场景-step4输入框弹出/收起', 35, step4)

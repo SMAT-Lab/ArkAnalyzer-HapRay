@@ -43,6 +43,7 @@ class PerfLoad_taobao_0030(PerfTestCase):
             self.swipes_up(swip_num=5, sleep=1)
             # Step('商品详情页浏览，下滑5次')
             self.swipes_down(swip_num=5, sleep=1)
+            self.swipes_up(swip_num=1, sleep=1)
             self.driver.touch(BY.text('查看全部'))
             self.driver.wait(1)
             time.sleep(2)

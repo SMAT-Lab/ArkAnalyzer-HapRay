@@ -38,7 +38,8 @@ class PerfLoad_taobao_0020(PerfTestCase):
 
             # 搜索华为手机官方旗舰店
             search_coords = self.convert_coordinate(475, 198)
-            self.driver.input_text(search_coords, '华为手机官方旗舰店')
+            self.driver.input_text(search_coords, '小熊电器')
+            time.sleep(2)
             self.driver.touch(BY.text('搜索'))
             time.sleep(2)
 

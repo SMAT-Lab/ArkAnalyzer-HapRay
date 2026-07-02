@@ -22,7 +22,7 @@ class PerfLoad_xhs_0090(PerfTestCase):
 
     def process(self):
         self.start_app()
-        self.touch_by_text('购物', 2)
+        self.touch_by_text('市集', 2)
 
         def step1():
             self.swipes_up(5, 3, 300)

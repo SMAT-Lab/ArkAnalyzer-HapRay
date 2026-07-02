@@ -40,13 +40,18 @@ class PerfLoad_taobao_0050(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         def step2():
-            # 点击第一个直播间
-            self.driver.touch(self.convert_coordinate(280, 1328))
+            # 点击搜索框
+            self.driver.touch(self.convert_coordinate(505, 216))
+            search_coords = self.convert_coordinate(505, 216)
+            self.driver.input_text(search_coords, '华为')
+            self.driver.touch(BY.text('看直播'))
             time.sleep(2)
+            # 点击空白处，清屏
+            self.driver.touch(self.convert_coordinate(583, 806))
             # Step('直播间切换，上滑5次')
-            self.swipes_up(swip_num=5, sleep=2)
+            # self.swipes_up(swip_num=5, sleep=2)
             # Step('直播间切换，下滑5次')
-            self.swipes_down(swip_num=5, sleep=2)
+            # self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step('淘宝-首页-step1直播页滑动', 40, step1)
+        self.execute_performance_step('淘宝-首页-step1直播页滑动', 30, step1)
         self.execute_performance_step('淘宝-首页-step2直播间上下滑动', 30, step2)

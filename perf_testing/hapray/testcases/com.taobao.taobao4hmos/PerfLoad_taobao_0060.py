@@ -35,7 +35,7 @@ class PerfLoad_taobao_0060(PerfTestCase):
             self.driver.touch(BY.text('我的订单'))
             self.driver.wait(1)
             # Step('订单下拉刷新，下滑5次')
-            self.swipes_down(swip_num=5, sleep=1)
+            # self.swipes_down(swip_num=5, sleep=1)
 
             # Step('订单页，上滑5次')
             self.swipes_up(swip_num=5, sleep=2)

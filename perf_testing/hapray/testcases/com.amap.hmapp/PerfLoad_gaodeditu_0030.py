@@ -34,7 +34,10 @@ class PerfLoad_gaodeditu_0030(PerfTestCase):
 
         def step1():
             # 点击搜索框
-            self.driver.touch(self.convert_coordinate(500, 1450))
+            if self.driver.find_component(BY.text('查找地点、公交、地铁')):
+                self.driver.touch(BY.text('查找地点、公交、地铁'))
+            else:
+                self.driver.touch(self.convert_coordinate(500, 1270))
             time.sleep(2)
 
             # 搜索大雁塔北广场
@@ -43,7 +46,8 @@ class PerfLoad_gaodeditu_0030(PerfTestCase):
             time.sleep(2)
 
             # 点击大雁塔北广场路线
-            self.driver.touch(self.convert_coordinate(973, 400))
+            self.driver.touch(self.convert_coordinate(286, 512))
+            self.driver.touch(BY.text('路线'))
             time.sleep(2)
 
             self.driver.touch(BY.text('公交地铁'))

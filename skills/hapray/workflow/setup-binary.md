@@ -19,8 +19,8 @@
 | 步 | 动作 |
 |:--:|------|
 | 1 | **识别平台**（见 §3.1.1），得到唯一 `asset_name` |
-| 2 | **确定 `tag`**：用户整链 URL 中的 tag → 否则 `HAPRAY_RELEASE_TAG` → 否则 Skill YAML `version` → `v{version}`（如 `1.5.6` → `v1.5.6`） |
-| 3 | **确定 `version`**：`tag` 去掉前缀 `v`（`v1.5.6` → `1.5.6`），代入 `asset_name` 模板 |
+| 2 | **确定 `tag`**：用户整链 URL 中的 tag → 否则 `HAPRAY_RELEASE_TAG` → 否则 Skill YAML `version` → `v{version}`（如 `1.5.7` → `v1.5.7`） |
+| 3 | **确定 `version`**：`tag` 去掉前缀 `v`（`v1.5.7` → `1.5.7`），代入 `asset_name` 模板 |
 | 4 | **拼直链**：用户已给整链则直接用；否则 `{BASE}releases/download/{tag}/{asset_name}` |
 | 5 | **`curl -fL` 下载**（见 §3.1.2）到 `<PROJECT_ROOT>/hapray-release/`，解压到 `<RUNTIME_ROOT>`，`hapray --help` 自检 |
 | 6 | 记录轨迹：`download_url`、`asset_name`、`tag`、`tag_source`、`platform` |
@@ -53,12 +53,12 @@
 - Linux：`uname -s`=`Linux` 且 `uname -m`=`x86_64`；Ubuntu 版本用 `lsb_release -rs` 或 `/etc/os-release`（仅 **22.04 / 24.04** 有官方包；其他版本 → §3.2 或请用户给整链）。  
 - macOS：`uname -s`=`Darwin`；`uname -m`=`arm64` 对应附件后缀 **`aarch64`**（勿拼 `_arm64`）。
 
-**直链示例**（`tag=v1.5.6`，`version=1.5.6`）：
+**直链示例**（`tag=v1.5.7`，`version=1.5.7`）：
 
-- Windows：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.6/ArkAnalyzer-HapRay-win32-x64-1.5.6.zip`
-- Ubuntu 24.04：`.../ArkAnalyzer-HapRay-linux-x64-ubuntu24.04-1.5.6.zip`
-- macOS Apple Silicon：`.../ArkAnalyzer-HapRay_1.5.6_aarch64.dmg`
-- macOS Intel：`.../ArkAnalyzer-HapRay_1.5.6_x64.dmg`
+- Windows：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.7/ArkAnalyzer-HapRay-win32-x64-1.5.7.zip`
+- Ubuntu 24.04：`.../ArkAnalyzer-HapRay-linux-x64-ubuntu24.04-1.5.7.zip`
+- macOS Apple Silicon：`.../ArkAnalyzer-HapRay_1.5.7_aarch64.dmg`
+- macOS Intel：`.../ArkAnalyzer-HapRay_1.5.7_x64.dmg`
 
 > 命名与 CI 一致（仓库内 `.gitcode/workflows` 或 `.github/workflows` 仅作文件名参考，**禁止**为核对附件去访问 GitHub）：Linux 仅 Ubuntu 22.04/24.04 x64；macOS 仅 DMG，`aarch64` / `x64` 后缀。
 

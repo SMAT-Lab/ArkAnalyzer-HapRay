@@ -34,7 +34,10 @@ class PerfLoad_gaodeditu_0020(PerfTestCase):
 
         def step1():
             # 点击搜索框
-            self.driver.touch(self.convert_coordinate(500, 1450))
+            if self.driver.find_component(BY.text('查找地点、公交、地铁')):
+                self.driver.touch(BY.text('查找地点、公交、地铁'))
+            else:
+                self.driver.touch(self.convert_coordinate(500, 1270))
             time.sleep(2)
 
             # 搜索西安钟楼
@@ -50,11 +53,12 @@ class PerfLoad_gaodeditu_0020(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('高德地图-钟楼搜索页面、推荐页面滑动浏览场景-step1上下滑动5次', 30, step1)
-
+        # self.driver.touch(BY.text('搜周边'))
+        self.driver.touch(self.convert_coordinate(150, 2176))
         def step2():
             # Step('左滑操作')
-            self.swipes_left(swip_num=3, sleep=2)
+            self.swipes_up(swip_num=5, sleep=2)
             # Step('右滑操作')
-            self.swipes_right(swip_num=3, sleep=2)
+            self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step('高德地图-钟楼搜索页面、推荐页面滑动浏览场景-step2上下滑动3次', 30, step2)
+        self.execute_performance_step('高德地图-钟楼搜索页面、周边推荐页面-step2上下滑动5次', 30, step2)

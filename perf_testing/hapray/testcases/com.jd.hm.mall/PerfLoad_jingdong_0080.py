@@ -1,15 +1,17 @@
+import time
+
 from hypium import BY
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
-class PerfLoad_taobao_0070(PerfTestCase):
+class PerfLoad_jingdong_0080(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
 
-        self._app_package = 'com.taobao.taobao4hmos'
-        self._app_name = '淘宝'
+        self._app_package = 'com.jd.hm.mall'
+        self._app_name = '京东'
         # 原始采集设备的屏幕尺寸（Nova 14）
         self.source_screen_width = 1084
         self.source_screen_height = 2412
@@ -25,17 +27,23 @@ class PerfLoad_taobao_0070(PerfTestCase):
     def process(self):
         self.driver.swipe_to_home()
 
-        # Step('启动被测应用')
+        # Step('启动京东应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-        def step1():
-            self.driver.touch(BY.text('飞猪'))
-            self.driver.wait(1)
+        # 点击秒送
+        self.driver.touch(BY.text('秒送'))
+        time.sleep(3)
 
-            # Step('飞猪页，上滑5次')
+        # 如果有红包，默认把红包收下
+        component = self.driver.find_component(BY.text('开心收下'))
+        if component:
+            self.driver.touch(BY.text('开心收下'))
+
+        def step1():
+            # Step('上滑操作')
             self.swipes_up(swip_num=5, sleep=3)
-            # Step('飞猪页，下滑5次')
+            # Step('下滑操作')
             self.swipes_down(swip_num=5, sleep=3)
 
-        self.execute_performance_step('淘宝-飞猪-step1飞猪页面上下滑动', 40, step1)
+        self.execute_performance_step('京东-秒送场景-step1秒送页面上下滑动', 40, step1)

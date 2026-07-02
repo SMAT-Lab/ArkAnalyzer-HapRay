@@ -1,6 +1,7 @@
 import time
 
 from hypium import BY
+from hypium import Rect
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -34,7 +35,10 @@ class PerfLoad_gaodeditu_0010(PerfTestCase):
 
         def step1():
             # 点击搜索框
-            self.driver.touch(self.convert_coordinate(500, 1450))
+            if self.driver.find_component(BY.text('查找地点、公交、地铁')):
+                self.driver.touch(BY.text('查找地点、公交、地铁'))
+            else:
+                self.driver.touch(self.convert_coordinate(500, 1270))
             time.sleep(2)
 
             # 搜索西安钟楼
@@ -43,12 +47,15 @@ class PerfLoad_gaodeditu_0010(PerfTestCase):
             self.driver.touch(BY.text('搜索'))
             time.sleep(2)
             self.driver.touch(BY.text('西安钟楼'))
-            time.sleep(2)
+            # time.sleep(2)
+            self.swipes_down(swip_num=1, sleep=2)
+            # 直接指定 left, right, top, bottom
+            rect = Rect(left=400, right=700, top=400, bottom=700)
 
             for _ in range(5):
-                self.driver.pinch_out(BY.text('西安钟楼'))
+                self.driver.pinch_out(area=rect)
             for _ in range(5):
-                self.driver.pinch_in(BY.text('西安钟楼'))
+                self.driver.pinch_in(area=rect)
 
         def step2():
             # Step('左滑操作')
