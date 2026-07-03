@@ -6,6 +6,8 @@
 
 > **何时执行（仅按需）**：①用户明确要符号恢复 / 符号级热点；②阶段4 high-load 发现火焰图热点为 stripped 地址（`libxxx.so+0x..`），需符号才能继续符号级分析。  
 > **默认不执行**：`perf` 已产出 `report/` 全套分析器数据（含 `more_flame_graph.json`）；SO级/帧级/线程级高负载分析**不依赖**本阶段。无 SO 路径或用户跳过时，符号级热点标注「建议符号恢复」即可，**不要**为此默认跑 `update`。
+>
+> **仅有 `perf.data` + SO + HTML、无 report 树**：走 **[symbol-recovery-standalone.md](symbol-recovery-standalone.md)**，**不要**硬跑 `update`。
 
 > **报告根目录（MUST）**：`<PROJECT_ROOT>/reports/<timestamp>/`（macOS 须先 [`ensure-workspace-layout.sh`](../scripts/ensure-workspace-layout.sh)）。`--report_dir` / `-r` 指向该 `<timestamp>` 目录，**禁止**使用工作区外的 `~/ArkAnalyzer-HapRay/reports/`。
 

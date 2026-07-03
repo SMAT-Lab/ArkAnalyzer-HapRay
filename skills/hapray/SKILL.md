@@ -241,6 +241,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 1b | [setup-source.md](workflow/setup-source.md) | 7 步 + `scripts/validate-env.sh` |
 | 2 | [perf-collect.md](workflow/perf-collect.md) | 预设→perf；禁止默认 gui-agent；**产出 `report/`** |
 | 3（可选） | [gen-perf-report.md](workflow/gen-perf-report.md) | **`update --so_dir`** 符号恢复（仅按需，默认 Agent；未提则跳过） |
+| 3b（可选） | [symbol-recovery-standalone.md](workflow/symbol-recovery-standalone.md) | **三参数轻量**：仅 `perf.data` + SO + HTML；无源码/无 report 树；dist `symbol-recovery.exe` + Agent |
 
 ---
 
