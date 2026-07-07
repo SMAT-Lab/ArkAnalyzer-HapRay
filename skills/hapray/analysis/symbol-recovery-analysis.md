@@ -2,6 +2,8 @@
 
 > 适用场景：在 HapRay 性能报告或 `perf.data` 中发现大量 `libxxx.so+0xXXXXX` 格式的
 > 缺失符号（stripped SO 文件），通过 SymRecover 工具恢复函数名并辅助定位性能瓶颈。
+>
+> **仅三参数、无源码、无完整 report 树、纯 dist 二进制**：见 **[轻量符号恢复 workflow](../workflow/symbol-recovery-standalone.md)**（`perf.data` + `--so-dir` + `--html-input`，Agent 离线闭环）。
 
 ---
 
