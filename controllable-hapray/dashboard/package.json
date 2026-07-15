@@ -1,0 +1,36 @@
+{
+  "name": "controllable-hapray-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Web dashboard for the Controllable HapRay workflow service.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n service,dashboard \"npm --prefix .. run dev\" \"vite\"",
+    "dev:service": "npm --prefix .. run dev",
+    "dev:server": "npm --prefix .. run dev",
+    "build": "tsc -b && vite build",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.5.2",
+    "concurrently": "^9.1.2",
+    "lucide-react": "^1.24.0",
+    "oxlint": "^1.71.0",
+    "postcss": "^8.5.16",
+    "tailwindcss": "^4.3.2",
+    "tsx": "^4.19.4",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  }
+}

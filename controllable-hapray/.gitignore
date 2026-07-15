@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.hapray-service/
+hapray-release/
+reports/
+logs/
+hapray-tool-result.json
