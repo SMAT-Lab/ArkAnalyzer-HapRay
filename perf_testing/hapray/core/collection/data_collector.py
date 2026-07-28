@@ -272,7 +272,7 @@ class DataCollector:
         self.memory_collection_threads[step_id] = {'thread': thread, 'stop_event': stop_event}
 
         thread.start()
-        Log.info(f'启动步骤 {step_id} 的内存数据采集线程，每 {interval_seconds}s 采集一次，持续直到停止')
+        Log.debug(f'启动步骤 {step_id} 的内存数据采集线程，每 {interval_seconds}s 采集一次，持续直到停止')
 
     def _memory_collection_worker(
         self, step_id: int, report_path: str, duration_seconds: int, interval_seconds: int, stop_event: threading.Event
@@ -288,17 +288,17 @@ class DataCollector:
             stop_event: 停止事件
         """
         if duration_seconds is None:
-            Log.info(f'内存采集线程启动：步骤 {step_id}，持续采集，间隔 {interval_seconds}s')
+            Log.debug(f'内存采集线程启动：步骤 {step_id}，持续采集，间隔 {interval_seconds}s')
             end_time = None
         else:
-            Log.info(f'内存采集线程启动：步骤 {step_id}，总时长 {duration_seconds}s，间隔 {interval_seconds}s')
+            Log.debug(f'内存采集线程启动：步骤 {step_id}，总时长 {duration_seconds}s，间隔 {interval_seconds}s')
             end_time = time.time() + duration_seconds
 
         collection_count = 0
 
         while (end_time is None or time.time() < end_time) and not stop_event.is_set():
             collection_count += 1
-            Log.info(f'步骤 {step_id} 第 {collection_count} 次内存数据采集')
+            Log.debug(f'步骤 {step_id} 第 {collection_count} 次内存数据采集')
 
             # 记录采集开始时间
             collection_start_time = time.time()

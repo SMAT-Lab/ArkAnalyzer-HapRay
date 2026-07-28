@@ -37,11 +37,11 @@
 
 触发后，深入程度至少达到以下 6 条：
 
-1. **枚举**：列出 `perf.db`（或含 `perf_sample` 的 `trace.db`）真实路径、SO 静态产物路径、`summary.json`（标注「不参与挖掘」）。若某类不存在，写「未找到：已搜索的模式」。
-2. **动态 Top 热点**：对每个 `perf.db` 执行 **§四.3.A**（SO 级）和 **§四.3.B**（符号级）的聚合 SQL，得到 Top-N 热点（`SUM(event_count)` 排序）。
-3. **帧级指令数**：若存在 `frame_slice`，执行 **§四.3.C** 的逐帧负载 SQL，输出指令数最高的帧列表。
+1. **枚举**：列出 `perf.db`（或含 `perf_sample` 的 `trace.db`）真实路径、`report/` 下预聚合 JSON（`so_file_load.json`、`trace_frameLoads.json`、`redundant_thread_analysis.json` 等，见 §2.4）、SO 静态产物路径、`summary.json`（标注「不参与挖掘」）。若某类不存在，写「未找到：已搜索的模式」。
+2. **动态 Top 热点**：按 **§四.3.A**（SO 级）和 **§四.3.B**（符号级）的**优先读 JSON → 保底 SQL** 流程，得到 Top-N 热点（`SUM(event_count)` 排序）。
+3. **帧级负载**：按 **§四.3.C** 的**优先读 `trace_frameLoads.json` → 保底 SQL** 流程，输出高负载帧列表。
 4. **静态交叉**（有产物时）：将动态热点 SO 与静态分析结论（LTO 状态、代码段大小、符号可见性）对齐，在 **§四.4** 中写出「优化机会」条目。
-5. **对照 HTML**：单列「HTML 已写明的结论」vs「仅从 perf_sample/callchain 可见的额外发现」，后者标为「LLM 挖掘 - 新发现」。
+5. **对照 HTML**：单列「HTML 已写明的结论」vs「仅从原始侧可见的额外发现」，后者标为「LLM 挖掘 - 新发现」。
 6. **落盘**：独立 `hapray-analysis-*.md`，含 §四.7 结构；**禁止**仅在对话中给结论而不落盘（除非用户只要对话）。
 
 ---
@@ -77,6 +77,8 @@ sqlite3 /path/to/perf.db "SELECT config_name, cmdline FROM perf_report"
 # 确认 event = raw-instruction-retired，period 值，采集范围
 ```
 
+> **优先读 JSON、SQL 保底**：`perf` 阶段的 12 个 analyzer 已将大部分维度预聚合到 `report/*.json`（见 §2.4）。这些 JSON 是**原始侧聚合**（非 `summary.json` 摘要），与阶段5 `signal_extractors.py` 读同一批文件。**仅当 JSON 缺失或口径不匹配时才回退到 perf.db SQL**，避免重复聚合。
+
 ### 2.2 静态数据（SO 二进制分析）
 
 | 来源 | 路径模式（以实际枚举为准） | 可提取内容 |
@@ -91,6 +93,31 @@ sqlite3 /path/to/perf.db "SELECT config_name, cmdline FROM perf_report"
 ### 2.3 `summary.json`（排除在外）
 
 若目录中存在 `summary.json`，**可列出路径**并注明**「不参与本次挖掘」**；**禁止**从中复述 Feed/图像/故障树/冗余线程等字段并包装成新发现。
+
+> **禁用范围仅限 `summary.json`**。`so_file_load.json`、`trace_frameLoads.json`、`redundant_thread_analysis.json` 等是 analyzer 直接从 `perf.db`/`trace.db` 提取的**原始侧聚合**（见 §2.4），不是摘要复述，**允许且鼓励**作为主线数据源。
+
+### 2.4 `report/` 下预聚合 JSON（优先数据源）
+
+`perf` 阶段的 analyzer 已将以下维度预聚合为 JSON，**优先直接读取**，与阶段5 `signal_extractors.py` 读同一批文件：
+
+| 维度 | 文件 | 生成者 | 关键字段 | 对应 SQL 保底（§四.3） |
+|------|------|--------|----------|----------------------|
+| **SO 级负载** | `so_file_load.json` | JS 侧 `sa-cmd` (`perf_analyzer.ts:generateFileLoadJson`)，按 step × .so 聚合 `load`（已过滤应用进程） | `file`、`file_path`、`load`、`step_id` | §四.3.A |
+| **帧级负载** | `trace_frameLoads.json` | `UnifiedFrameAnalyzer`，top 高负载帧 | `frame_load`、`dur`、`flag`（1=high 2=empty）、`thread_name` | §四.3.C |
+| **冗余线程** | `redundant_thread_analysis.json` | `ThreadAnalyzer` | `redundant_threads`（含 `redundant_instructions`、`waiting_ratio`） | §四.3.D（冗余线程部分） |
+| **组件复用** | `trace_componentReuse.json` | `ComponentReusableAnalyzer` | `total_builds`、`recycled_builds`、`reusability_ratio` | — |
+| **IPC/Binder** | `trace_ipc_binder.json` | `IpcBinderAnalyzer` | `caller_proc`、`callee_proc`、`count`、`qps` | — |
+| **帧率/RS/Vsync** | `trace_frames.json` 等 | `UnifiedFrameAnalyzer` | `avg_fps`、`stutter_rate`、`rs_skip_frames` | — |
+| **火焰图全量** | `more_flame_graph.json` | `PerfAnalyzer`（= `perf.json` 全量内容） | `symbolsFileList`、`SymbolMap`、`recordSampleInfo` | §四.3.B（**体积 ~40MB，不可直读，须 SQL 或 Top-N 预聚合**） |
+
+**使用原则**：
+
+1. **优先读 JSON**：上表前 6 个文件体积小（KB 级），直接 `Read` 或 `cat` 即可，**不必再跑 SQL 重复聚合**。
+2. **SQL 保底条件**（满足其一才回退）：
+   - JSON 文件不存在（analyzer 未跑或失败）
+   - JSON 口径与挖掘需求不匹配（如 `trace_frameLoads.json` 的 `frame_load` ≠ 指令数 `event_count`，需要指令数时仍须 SQL）
+   - 需要 JSON 未覆盖的 finer 粒度（如 `redundant_thread_analysis.json` 只含冗余线程，全线程指令数分布仍须 SQL）
+3. **`more_flame_graph.json` 例外**：体积 ~40MB，**禁止直接 Read**；其符号级 Top-N 须通过 §四.3.B 的 SQL 聚合获取（当前无紧凑 Top-N JSON 产物）。
 
 ---
 
@@ -153,16 +180,36 @@ sqlite3 /path/to/perf.db "SELECT config_name, cmdline FROM perf_report"
 
 列出（可表格）：
 
-- `perf.db` 或内嵌 perf 表的 `trace.db` 的**真实绝对路径**（按 `step*` 子目录分列）
+- `report/` 下预聚合 JSON（`so_file_load.json`、`trace_frameLoads.json`、`redundant_thread_analysis.json` 等，见 §2.4）——**标注哪些存在可直接读**
+- `perf.db` 或内嵌 perf 表的 `trace.db` 的**真实绝对路径**（按 `step*` 子目录分列）——**保底数据源**
 - SO 静态分析产物路径（`opt/`、`static-output/`、`symbol_recovery/` 等）
 - `perf.data` 原始文件（若存在）
 - `summary.json`（列路径并标注「不参与挖掘」）
 
 若某类不存在，写「未找到：已搜索模式 `**/perf.db` 等」。
 
-### 4.3 动态数据：聚合查询
+### 4.3 动态数据：优先读 JSON → 保底 SQL
+
+> **核心原则**：与阶段5 `signal_extractors.py` 对齐——能读 `report/*.json` 的直接读，**不重复聚合**；SQL 仅在 JSON 缺失或口径不匹配时保底。
 
 #### A. SO 级热点（优先执行）
+
+**第一步：读 `so_file_load.json`（优先）**
+
+```bash
+# so_file_load.json 已由 sa-cmd 按 step × .so 聚合 load（应用进程已过滤），与下方 SQL 等价
+cat <用例>/report/so_file_load.json | python -c "
+import json,sys
+data=json.load(sys.stdin)
+# 按 load 降序，取 Top-20
+top=sorted(data, key=lambda x: -x.get('load',0))[:20]
+total=sum(r.get('load',0) for r in data) or 1
+for r in top:
+    print(f'{r[\"file\"]:40s} load={r[\"load\"]:>12,}  pct={r[\"load\"]*100/total:.2f}%  step={r.get(\"step_id\",\"?\")}')
+"
+```
+
+**第二步：SQL 保底（仅当 `so_file_load.json` 不存在时）**
 
 ```sql
 -- SO 级总指令数 Top-N（用实际 perf.db 路径替换）
@@ -184,6 +231,8 @@ LIMIT 20;
 
 #### B. 符号级热点（对 Top-3 SO 执行）
 
+> **当前无紧凑 Top-N JSON 产物**（`more_flame_graph.json` ~40MB 不可直读），本维度**须 SQL 聚合**。若未来新增 `symbol_load_topN.json`，应优先读 JSON。
+
 ```sql
 -- 指定 SO 内符号级 Top-N
 SELECT
@@ -203,7 +252,27 @@ ORDER BY total_instructions DESC
 LIMIT 30;
 ```
 
-#### C. 帧级指令数分布（有 `frame_slice` 时执行）
+#### C. 帧级负载（优先读 JSON → 保底 SQL）
+
+**第一步：读 `trace_frameLoads.json`（优先）**
+
+```bash
+# trace_frameLoads.json 已由 UnifiedFrameAnalyzer 聚合 top 高负载帧
+cat <用例>/report/trace_frameLoads.json | python -c "
+import json,sys
+data=json.load(sys.stdin)
+for step_id, step in data.items():
+    stats=step.get('statistics',{})
+    print(f'=== {step_id} === total={stats.get(\"total_frames\",\"?\")} high_load={stats.get(\"high_load_frames\",\"?\")} max={stats.get(\"max_load\",\"?\")}')
+    for fr in (step.get('top_frames') or [])[:10]:
+        flag='empty' if fr.get('flag')==2 else 'high'
+        print(f'  load={fr.get(\"frame_load\",0):>10}  dur={fr.get(\"dur\",0):>12}ns  {flag}  thread={fr.get(\"thread_name\",\"?\")}')
+"
+```
+
+**第二步：SQL 保底（仅当需要「逐帧指令数」口径且 JSON 不满足时）**
+
+> `trace_frameLoads.json` 的 `frame_load` 与 `perf_sample.event_count` 口径可能不同；**仅当明确需要 `SUM(event_count)` per frame 时才跑下方 SQL**。
 
 先自省时间戳字段名：
 
@@ -254,7 +323,26 @@ ORDER BY frame_instructions DESC
 LIMIT 30;
 ```
 
-#### D. 线程维度（按进程/线程分组）
+#### D. 线程维度（优先读 JSON → 保底 SQL）
+
+**第一步：读 `redundant_thread_analysis.json`（优先，覆盖冗余线程）**
+
+```bash
+# redundant_thread_analysis.json 已由 ThreadAnalyzer 聚合冗余线程
+cat <用例>/report/redundant_thread_analysis.json | python -c "
+import json,sys
+data=json.load(sys.stdin)
+for step_id, step in data.items():
+    rs=step.get('redundant_threads_summary',{})
+    print(f'=== {step_id} === redundant_threads={rs.get(\"total_redundant_threads\",0)} redundant_instructions={rs.get(\"total_redundant_instructions\",0)}')
+    for t in (rs.get('redundant_threads') or [])[:10]:
+        print(f'  {t.get(\"thread_name\",\"?\"):30s} type={t.get(\"type\",\"?\"):10s} instr={t.get(\"redundant_instructions\",0):>12}  wait_ratio={t.get(\"waiting_ratio\",0)}')
+"
+```
+
+**第二步：SQL 保底（仅当需要「全线程指令数分布」且 JSON 不覆盖时）**
+
+> `redundant_thread_analysis.json` 只含**冗余**线程。**全线程**（含主线程）指令数分布仍须 SQL。
 
 先确认目标应用的 `process_id`：
 
@@ -287,7 +375,7 @@ LIMIT 20;
 
 #### E. 跨步骤对比（多 step 时执行）
 
-对每个 `stepN/perf.db` 分别执行 A 查询，汇总表格比较各步骤 `total_instructions`。
+对每个 `stepN` 分别取 §4.3.A 的 JSON 结果（`so_file_load.json` 按 `step_id` 分列）或保底 SQL 结果，汇总表格比较各步骤 `total_instructions`。
 
 ### 4.4 静态数据交叉
 
@@ -302,10 +390,10 @@ LIMIT 20;
 
 逐条列出：
 
-- **HTML 已写明的结论**（热点 SO、帧率数值等）
-- **仅从 `perf_sample`/`perf_callchain`/静态产物可见的额外发现** → 标为「LLM 挖掘 - 新发现」
+- **HTML / `report/*.json` 已写明的结论**（热点 SO、帧率数值、冗余线程等）
+- **仅从原始侧（`perf_sample`/`perf_callchain`/静态产物）可见的额外发现** → 标为「LLM 挖掘 - 新发现」
 
-**禁止**把 `summary.json` 字段与 HTML 的「字段对齐」当作新发现来源。
+**禁止**把 `summary.json` 字段与 HTML 的「字段对齐」当作新发现来源；**也禁止**把 `so_file_load.json` 等 JSON 的已有聚合复述为新发现——新发现须是 JSON/HTML **未直接陈述**的额外洞察。
 
 ### 4.6 LLM 推理任务（显式）
 
@@ -327,7 +415,7 @@ LIMIT 20;
 
 - **报告元信息**（文末必填，见主 `SKILL.md`）
 - **数据范围**（真实路径列表；`summary.json` 单独注明「不参与挖掘」）
-- **高指令数热点表**（对应 §三，每条含：SO/符号、指令数、占比、来源 SQL/文件）
+- **高指令数热点表**（对应 §三，每条含：SO/符号、指令数、占比、**来源 JSON 或 SQL**）
 - **动静交叉优化机会表**（§三.3.5）
 - **新发现**（每条：现象、可追溯证据、与 HTML 差异、风险/影响等级、建议验证步骤）
 - **未覆盖/数据不足**（诚实列出；含「需 symbol-recovery」的 SO）
@@ -357,11 +445,11 @@ LIMIT 20;
 | 维度 | 阶段4（本 Skill） | 阶段5 root-cause |
 |------|------------------|------------------|
 | 目标 | 发现线索与假设 | 确认根因 + 源码级定位 |
-| 手段 | Agent 手动 SQL + 数据探索 | CLI 自动多信号提取 + LLM/Agent 推断 |
+| 手段 | Agent 读 JSON + 保底 SQL + 数据探索 | CLI 自动多信号提取 + LLM/Agent 推断 |
 | 产出 | 高负载热点表 + 新发现 | `root_cause.md` + Agent 源码级补充 |
-| 数据源 | 同一原始产物（`report/`） | CLI 独立提取，不依赖阶段4产出 |
+| 数据源 | 同一原始产物（`report/` JSON + 保底 `perf.db`） | CLI 独立提取（读同一批 `report/*.json`），不依赖阶段4产出 |
 
-**注意**：阶段5 CLI 的 `signal_extractors`（`CpuHotspotEvidenceExtractor` 等）与本 Skill 的 §四.3 SQL 查询覆盖类似的数据源，但分析深度和产出格式不同。本 Skill 侧重**人工发现与验证**，CLI 侧重**自动推断**。Agent 在阶段5做补充深挖时，应引用本阶段的发现而非从零重做。
+**注意**：阶段5 CLI 的 `signal_extractors`（`SoLoadEvidenceExtractor` 读 `so_file_load.json`、`FrameLoadEvidenceExtractor` 读 `trace_frameLoads.json` 等）与本 Skill §四.3 **读同一批 JSON**。本 Skill 改为 JSON 优先后，**阶段4与阶段5的数据源完全对齐**，仅在分析深度和产出格式上不同：本 Skill 侧重**人工发现与验证**，CLI 侧重**自动推断**。Agent 在阶段5做补充深挖时，应引用本阶段的发现而非从零重做。
 
 ---
 
@@ -369,7 +457,7 @@ LIMIT 20;
 
 满足以下全部条件，才可标记为 **「LLM 挖掘 - 新发现」**：
 
-1. **自动报告未明确给出**：HTML（或等价面向人结论）中未直接陈述该问题。  
+1. **自动报告未明确给出**：HTML 或 `report/*.json`（`so_file_load.json`、`trace_frameLoads.json` 等）中未直接陈述该问题。  
 2. **证据可追溯**：至少满足其一：  
    - 双源证据（例如 trace + perf，或 trace + 日志）；  
    - 单源强证据（仅 trace 但具备稳定重复的聚合结果）+ 一条反证说明。  
@@ -382,10 +470,11 @@ LIMIT 20;
 ## 七、禁止与质量约束
 
 - **禁止**虚构路径、表名、栈名、百分比与指令数。
-- **禁止**仅根据行业常识输出「热点清单」而不引用本轮**真实产物**的 SQL 输出。
+- **禁止**仅根据行业常识输出「热点清单」而不引用本轮**真实产物**的输出（JSON 或 SQL）。
 - **禁止**以 `summary.json` 作为 LLM 高负载挖掘的主线数据源。
-- 「新发现」每条须带：**文件路径 + 查询**可追溯证据（来自原始侧，非 summary 字段复述）；若为推测，标注**「待验证」**并给出验证步骤。
-- 若仅有 `trace.db` 无独立 `perf.db`，先检查 `trace.db` 中是否存在 `perf_sample` 表（`sqlite3 trace.db ".tables"`），再决定是否可执行 §四.3 的 SQL。
+- **禁止**对 `report/` 下已有预聚合 JSON（`so_file_load.json` 等，见 §2.4）重复跑 SQL 聚合——**优先读 JSON，SQL 仅保底**（JSON 缺失或口径不匹配时）。
+- 「新发现」每条须带：**文件路径 + 查询/命令**可追溯证据（来自原始侧，非 summary 字段复述）；若为推测，标注**「待验证」**并给出验证步骤。
+- 若仅有 `trace.db` 无独立 `perf.db`，先检查 `trace.db` 中是否存在 `perf_sample` 表（`sqlite3 trace.db ".tables"`），再决定是否可执行 §四.3 的保底 SQL。
 - 若热点符号大量为 `[unknown]`，**不得**假装完成「符号级分析」；应在报告中标注「需 symbol-recovery 后重分析」。
 
 ---
