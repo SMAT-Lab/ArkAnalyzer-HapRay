@@ -5,6 +5,7 @@ import type { RunState, WorkflowEvent, WorkflowEventType, StageId } from "./doma
 import { WorkflowEventBus } from "./event-bus.js";
 
 const RENAME_RETRY_DELAYS_MS = [10, 20, 40, 80, 160] as const;
+const TRANSIENT_RENAME_ERROR_CODES = new Set(["EACCES", "EBUSY", "EPERM"]);
 
 export async function renameWithRetry(
   source: string,
@@ -16,7 +17,8 @@ export async function renameWithRetry(
       await renameFile(source, destination);
       return;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!code || !TRANSIENT_RENAME_ERROR_CODES.has(code)) throw error;
       await delay(retryDelay);
     }
   }
