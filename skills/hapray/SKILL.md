@@ -328,7 +328,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 cd <REPO_ROOT>/perf_testing
 uv run python -m scripts.main prepare --run_testcases "PerfLoad_<用例名>"
 uv run python -m scripts.main perf \
-  --run_testcases "PerfLoad_<用例名>" --apps <包名> --round 1 \
+  --run_testcases "PerfLoad_<用例名>" --round 1 \
   --result-file <PROJECT_ROOT>/hapray-tool-result.json
 # perf 已产出 <用例>/report/ 全套分析器数据（summary.json、more_flame_graph.json、trace_*.json…）
 # macOS 已 ensure-workspace-layout 时报告已在 <PROJECT_ROOT>/reports/；
