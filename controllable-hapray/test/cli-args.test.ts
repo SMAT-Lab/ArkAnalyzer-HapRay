@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import { parseCliArgs } from "../src/cli-args.js";
 
@@ -18,7 +19,7 @@ test("CLI infers an existing-report workflow from --reports for backward compati
   assert.equal(result.request.opencode?.model?.modelID, "deepseek-v4-flash");
   assert.equal(result.request.symbolRecovery, "never");
   assert.equal(result.request.runtimeTrack, "auto");
-  assert.equal(result.request.outputDir, "/reports-output");
+  assert.equal(result.request.outputDir, path.resolve("/reports-output"));
   assert.equal(result.json, true);
 });
 
@@ -38,15 +39,15 @@ test("CLI maps collection and device arguments to a full workflow", () => {
   ]);
   assert.deepEqual(result.request, {
     request: "collect and analyze the home feed",
-    projectRoot: "/workspace",
+    projectRoot: path.resolve("/workspace"),
     kind: "full",
-    haprayRoot: "/hapray-tool",
+    haprayRoot: path.resolve("/hapray-tool"),
     mode: "full",
     runtimeTrack: "source",
     symbolRecovery: "auto",
-    sourceDir: "/source",
-    soDir: "/libs",
-    repoRoot: "/hapray",
+    sourceDir: path.resolve("/source"),
+    soDir: path.resolve("/libs"),
+    repoRoot: path.resolve("/hapray"),
     packageName: "com.example.app",
     testcase: "PerfLoad_home_scroll",
     device: "device-001",
