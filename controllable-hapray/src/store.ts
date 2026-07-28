@@ -1,7 +1,27 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { RunState, WorkflowEvent, WorkflowEventType, StageId } from "./domain.js";
 import { WorkflowEventBus } from "./event-bus.js";
+
+const RENAME_RETRY_DELAYS_MS = [10, 20, 40, 80, 160] as const;
+
+export async function renameWithRetry(
+  source: string,
+  destination: string,
+  renameFile: typeof rename = rename,
+): Promise<void> {
+  for (const retryDelay of RENAME_RETRY_DELAYS_MS) {
+    try {
+      await renameFile(source, destination);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+      await delay(retryDelay);
+    }
+  }
+  await renameFile(source, destination);
+}
 
 export class RunStore {
   readonly #bus: WorkflowEventBus;
@@ -75,7 +95,7 @@ export class RunStore {
     const destination = path.join(directory, "state.json");
     const temporary = `${destination}.tmp`;
     await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-    await rename(temporary, destination);
+    await renameWithRetry(temporary, destination);
   }
 
   async #readEventsFile(directory: string): Promise<WorkflowEvent[]> {
