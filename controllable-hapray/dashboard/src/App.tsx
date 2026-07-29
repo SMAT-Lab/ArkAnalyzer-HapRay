@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, AlertTriangle, Archive, BarChart3, Bell, Braces, Check, CheckCheck, ChevronDown,
-  ChevronRight, Circle, Code2, FileText, Files, FolderOpen, GitBranch,
-  HardDriveDownload, History, LockKeyhole, MoreHorizontal, PanelBottom, Play,
-  PlayCircle, Plus, Copy, Radar, Radio, Search, Settings, ShieldCheck,
-  Smartphone, SquareTerminal, StopCircle, Target, XCircle,
+  Activity, AlertTriangle, Archive, ArrowRight, BarChart3, Braces, Check, CheckCheck, ChevronDown,
+  ChevronRight, Circle, FileText, FolderOpen, GitBranch,
+  HardDriveDownload, LockKeyhole, Play,
+  PlayCircle, Plus, Copy, Radar, Radio, ShieldCheck,
+  Smartphone, SquareTerminal, StopCircle, Target, X, XCircle,
 } from 'lucide-react'
 import './App.css'
 import { copyText } from './clipboard'
@@ -122,6 +122,10 @@ export default function App() {
     }
   }
 
+  const removeRecent = (id: string) => {
+    setRecentRuns((current) => saveRecentRuns(current.filter((item) => item.id !== id)))
+  }
+
   const newRun = () => {
     service.clear()
     setForm((current) => ({ ...EMPTY_FORM, projectRoot: current.projectRoot, haprayRoot: current.haprayRoot, sourceDir: current.sourceDir, soDir: current.soDir }))
@@ -135,7 +139,6 @@ export default function App() {
       <TitleBar serviceOnline={serviceOnline} onNewRun={newRun} hasRun={Boolean(service.run)} />
 
       <div className={`vscode-workbench ${showDevicePreview ? 'has-device-preview' : ''}`}>
-        <ActivityBar />
         <PrimarySidebar
           form={form}
           patchForm={patchForm}
@@ -147,6 +150,7 @@ export default function App() {
           error={formError ?? service.error}
           recentRuns={recentRuns}
           openRecent={openRecent}
+          removeRecent={removeRecent}
           activeRunId={service.run?.id}
           runtime={runtime}
           browsePath={(key, label) => setPathPicker({ key, label })}
@@ -193,40 +197,22 @@ export default function App() {
 function TitleBar({ serviceOnline, onNewRun, hasRun }: { serviceOnline: boolean | null; onNewRun: () => void; hasRun: boolean }) {
   return (
     <header className="titlebar">
-      <div className="titlebar-menu" aria-label="Application menu">
-        <Code2 size={16} className="titlebar-logo" />
-        <button>File</button><button>Run</button><button>View</button><button>Help</button>
+      <div className="titlebar-brand">
+        <span className="brand-mark">H</span>
+        <span className="brand-name">ArkAnalyzer-HapRay</span>
       </div>
-      <div className="command-center"><Search size={13} /><span>Controllable HapRay</span></div>
       <div className="titlebar-actions">
         <span className={`service-dot ${serviceOnline ? 'is-online' : serviceOnline === false ? 'is-offline' : ''}`} />
-        {hasRun && <button className="icon-button" onClick={onNewRun} title="New run"><Plus size={15} /></button>}
-        <button className="icon-button" title="Layout controls"><PanelBottom size={15} /></button>
+        <span className="service-label">{serviceOnline ? 'Service online' : serviceOnline === false ? 'Service offline' : 'Connecting…'}</span>
+        {hasRun && <button className="ghost-button" onClick={onNewRun} title="New run"><Plus size={15} /> New run</button>}
       </div>
     </header>
   )
 }
 
-function ActivityBar() {
-  return (
-    <nav className="activitybar" aria-label="Workbench activities">
-      <div className="activitybar-top">
-        <button className="activity-button is-active" title="Explorer" aria-label="Explorer"><Files size={24} /></button>
-        <button className="activity-button" title="Search" aria-label="Search"><Search size={23} /></button>
-        <button className="activity-button" title="Run and Debug" aria-label="Run and Debug"><Play size={23} /></button>
-        <button className="activity-button" title="Run history" aria-label="Run history"><History size={23} /></button>
-      </div>
-      <div className="activitybar-bottom">
-        <button className="activity-button" title="Notifications" aria-label="Notifications"><Bell size={22} /></button>
-        <button className="activity-button" title="Manage" aria-label="Manage"><Settings size={23} /></button>
-      </div>
-    </nav>
-  )
-}
-
 function PrimarySidebar({
   form, patchForm, showAdvanced, setShowAdvanced, startRun, submitting, busy, error,
-  recentRuns, openRecent, activeRunId,
+  recentRuns, openRecent, removeRecent, activeRunId,
   runtime, browsePath,
 }: {
   form: FormState
@@ -239,13 +225,14 @@ function PrimarySidebar({
   error: string | null
   recentRuns: RecentRun[]
   openRecent: (recent: RecentRun) => Promise<void>
+  removeRecent: (id: string) => void
   activeRunId?: string
   runtime: ReturnType<typeof useRuntimeOptions>
   browsePath: (key: PathFieldKey, label: string) => void
 }) {
   return (
     <aside className="primary-sidebar">
-      <div className="sidebar-title"><span>EXPLORER</span><MoreHorizontal size={16} /></div>
+      <div className="sidebar-title"><span>EXPLORER</span></div>
       <div className="sidebar-scroll">
         <section className="sidebar-section is-open">
           <div className="section-header"><ChevronDown size={15} /><span>HAPRAY RUN</span></div>
@@ -298,10 +285,11 @@ function PrimarySidebar({
           <div className="tree-list">
             {recentRuns.length === 0 && <div className="tree-empty">No recent runs</div>}
             {recentRuns.map((recent) => (
-              <button key={recent.id} className={`tree-item ${recent.id === activeRunId ? 'is-selected' : ''}`} onClick={() => void openRecent(recent)} title={recent.request}>
+              <div key={recent.id} className={`tree-item ${recent.id === activeRunId ? 'is-selected' : ''}`} role="button" tabIndex={0} onClick={() => void openRecent(recent)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void openRecent(recent) } }} title={recent.request}>
                 <FileText size={15} className="file-icon" />
                 <span className="tree-item-copy"><span>{recent.request}</span><small>{formatRelativeDate(recent.createdAt)}</small></span>
-              </button>
+                <button type="button" className="tree-item-delete" title="Remove from recent" aria-label={`Remove ${recent.request} from recent`} onClick={(event) => { event.stopPropagation(); removeRecent(recent.id) }}><X size={13} /></button>
+              </div>
             ))}
           </div>
         </section>
@@ -318,9 +306,6 @@ function EditorTabs({ run }: { run: RunState | null }) {
         <span>{run ? `${shortId(run.id)}.hapray` : 'workflow.hapray'}</span>
         <span className={`tab-dirty ${run?.status === 'running' ? 'is-live' : ''}`} />
       </div>
-      <div className="editor-tab-spacer" />
-      <button className="editor-action" title="Split editor"><Code2 size={15} /></button>
-      <button className="editor-action" title="More actions"><MoreHorizontal size={16} /></button>
     </div>
   )
 }
@@ -431,14 +416,103 @@ function StageRow({ definition, state, run, now }: { definition: StageDefinition
         <StatusGlyph status={status} />
       </button>
       {started && expanded && (
-        <div className="stage-details" id={detailsId}>
-          <StageDetail label="Input parameters" value={stageInputs(run, definition.id)} />
-          <StageDetail label="Output result" value={state?.result ?? (state?.error ? { error: state.error } : null)} />
-          <div className="stage-result-summary"><div className="stage-detail-heading"><span>Execution summary</span><CopyButton label="execution summary" value={summary} /></div><p>{summary}</p></div>
-        </div>
+        <StageDetails detailsId={detailsId} run={run} definition={definition} state={state} summary={summary} />
       )}
     </article>
   )
+}
+
+function StageDetails({ detailsId, run, definition, state, summary }: {
+  detailsId: string
+  run: RunState | null
+  definition: StageDefinition
+  state?: StageState
+  summary: string
+}) {
+  const [view, setView] = useState<'interactive' | 'complete'>('interactive')
+  const input = stageInputs(run, definition.id)
+  const output = state?.result ?? (state?.error ? { error: state.error } : null)
+  const inputJson = JSON.stringify(input, null, 2) ?? 'null'
+  const outputJson = JSON.stringify(output, null, 2) ?? 'null'
+  return (
+    <div className="stage-details" id={detailsId}>
+      <div className="stage-io-bar">
+        <div className="stage-io-toggle" role="tablist" aria-label="Stage input and output view">
+          <button type="button" role="tab" aria-selected={view === 'interactive'} className={view === 'interactive' ? 'is-active' : ''} onClick={() => setView('interactive')}>Interactive</button>
+          <button type="button" role="tab" aria-selected={view === 'complete'} className={view === 'complete' ? 'is-active' : ''} onClick={() => setView('complete')}>Complete</button>
+        </div>
+      </div>
+      {view === 'interactive' ? (
+        <div className="stage-io-pair is-interactive">
+          <IoBlock label="Input parameters" value={input} json={inputJson} tone="input" />
+          <div className="io-arrow" aria-hidden="true"><ArrowRight size={16} /></div>
+          <IoBlock label="Output result" value={output} json={outputJson} tone="output" />
+        </div>
+      ) : (
+        <div className="stage-io-pair is-complete">
+          <StageDetail label="Input parameters" value={input} />
+          <StageDetail label="Output result" value={output} />
+        </div>
+      )}
+      <div className="stage-result-summary"><div className="stage-detail-heading"><span>Execution summary</span><CopyButton label="execution summary" value={summary} /></div><p>{summary}</p></div>
+    </div>
+  )
+}
+
+function IoBlock({ label, value, json, tone }: { label: string; value: unknown; json: string; tone: 'input' | 'output' }) {
+  return (
+    <div className={`io-block io-${tone}`}>
+      <div className="stage-detail-heading"><span>{label}</span><CopyButton label={label} value={json} /></div>
+      <div className="io-tree">{value == null ? <span className="json-empty">null</span> : <JsonNode value={value} depth={0} />}</div>
+    </div>
+  )
+}
+
+function JsonNode({ name, value, depth }: { name?: string; value: unknown; depth: number }) {
+  const [open, setOpen] = useState(depth < 1)
+  const isContainer = value !== null && typeof value === 'object'
+  if (!isContainer) {
+    return (
+      <div className="json-row json-leaf">
+        {name !== undefined && <span className="json-key">{name}:</span>}
+        <span className={`json-value json-${primitiveType(value)}`}>{formatPrimitive(value)}</span>
+      </div>
+    )
+  }
+  const entries: Array<readonly [string, unknown]> = Array.isArray(value)
+    ? value.map((item, index) => [String(index), item] as const)
+    : Object.entries(value as Record<string, unknown>)
+  const preview = Array.isArray(value) ? `Array(${value.length})` : `{${entries.length} keys}`
+  return (
+    <div className="json-node">
+      <button type="button" className="json-toggle" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        {name !== undefined && <span className="json-key">{name}:</span>}
+        <span className="json-preview">{preview}</span>
+      </button>
+      {open && (
+        <div className="json-children">
+          {entries.length === 0
+            ? <span className="json-empty">{Array.isArray(value) ? '[ ]' : '{ }'}</span>
+            : entries.map(([key, child]) => <JsonNode key={key} name={key} value={child} depth={depth + 1} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function primitiveType(value: unknown): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') return 'string'
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'boolean') return 'boolean'
+  return 'literal'
+}
+
+function formatPrimitive(value: unknown): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') return JSON.stringify(value)
+  return String(value)
 }
 
 function StageDetail({ label, value }: { label: string; value: unknown }) {
@@ -487,7 +561,7 @@ function FindingsSidebar({ run, device, previewOpen, togglePreview }: {
           {previewOpen ? 'Hide' : 'Monitor'}
         </button>
       </div>
-      <div className="secondary-tabs"><button className="is-active">FINDINGS</button><button>OUTLINE</button><MoreHorizontal size={15} /></div>
+      <div className="secondary-tabs"><button className="is-active">FINDINGS</button></div>
       <div className="secondary-toolbar"><span>{problems} Problems</span><span>{findings.length - problems} Observations</span></div>
       <div className="findings-list">
         {findings.length === 0 && <div className="welcome-placeholder"><Target size={28} /><strong>No findings yet</strong><p>Structured findings appear here as analysis stages complete.</p></div>}
@@ -538,8 +612,6 @@ function BottomPanel({ tab, setTab, run, events }: { tab: PanelTab; setTab: (tab
         <button className={tab === 'events' ? 'is-active' : ''} onClick={() => setTab('events')}>EVENTS <span>{events.length}</span></button>
         <button className={tab === 'sessions' ? 'is-active' : ''} onClick={() => setTab('sessions')}>SESSIONS <span>{sessionCount}</span></button>
         <button className={tab === 'artifacts' ? 'is-active' : ''} onClick={() => setTab('artifacts')}>ARTIFACTS <span>{run?.artifacts.length ?? 0}</span></button>
-        <button>OUTPUT</button>
-        <div className="panel-actions"><button title="Panel position"><PanelBottom size={14} /></button><button title="More actions"><MoreHorizontal size={15} /></button></div>
       </div>
       {tab === 'events' ? <EventTable events={events} running={run?.status === 'running'} /> : tab === 'sessions' ? <SessionTerminal run={run} events={events} /> : <ArtifactTable run={run} />}
     </section>
@@ -620,7 +692,7 @@ function StatusBar({ label, serviceOnline, run, connected, eventCount }: { label
         <span><AlertTriangle size={13} />{run?.findings.filter((finding) => finding.severity === 'P0' || finding.severity === 'P1').length ?? 0}</span>
       </div>
       <div className="statusbar-right">
-        <span>{connected ? 'SSE connected' : 'SSE idle'}</span><span>{eventCount} events</span><span>HapRay</span><Bell size={13} />
+        <span>{connected ? 'SSE connected' : 'SSE idle'}</span><span>{eventCount} events</span><span>HapRay</span>
         <span className="sr-only">Service status: {serviceOnline === null ? 'checking' : serviceOnline ? 'online' : 'offline'}</span>
       </div>
     </footer>
