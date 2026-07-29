@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, AlertTriangle, Archive, BarChart3, Braces, Check, CheckCheck, ChevronDown,
+  Activity, AlertTriangle, Archive, ArrowRight, BarChart3, Braces, Check, CheckCheck, ChevronDown,
   ChevronRight, Circle, FileText, FolderOpen, GitBranch,
   HardDriveDownload, LockKeyhole, Play,
   PlayCircle, Plus, Copy, Radar, Radio, ShieldCheck,
-  Smartphone, SquareTerminal, StopCircle, Target, XCircle,
+  Smartphone, SquareTerminal, StopCircle, Target, X, XCircle,
 } from 'lucide-react'
 import './App.css'
 import { copyText } from './clipboard'
@@ -122,6 +122,10 @@ export default function App() {
     }
   }
 
+  const removeRecent = (id: string) => {
+    setRecentRuns((current) => saveRecentRuns(current.filter((item) => item.id !== id)))
+  }
+
   const newRun = () => {
     service.clear()
     setForm((current) => ({ ...EMPTY_FORM, projectRoot: current.projectRoot, haprayRoot: current.haprayRoot, sourceDir: current.sourceDir, soDir: current.soDir }))
@@ -146,6 +150,7 @@ export default function App() {
           error={formError ?? service.error}
           recentRuns={recentRuns}
           openRecent={openRecent}
+          removeRecent={removeRecent}
           activeRunId={service.run?.id}
           runtime={runtime}
           browsePath={(key, label) => setPathPicker({ key, label })}
@@ -207,7 +212,7 @@ function TitleBar({ serviceOnline, onNewRun, hasRun }: { serviceOnline: boolean 
 
 function PrimarySidebar({
   form, patchForm, showAdvanced, setShowAdvanced, startRun, submitting, busy, error,
-  recentRuns, openRecent, activeRunId,
+  recentRuns, openRecent, removeRecent, activeRunId,
   runtime, browsePath,
 }: {
   form: FormState
@@ -220,6 +225,7 @@ function PrimarySidebar({
   error: string | null
   recentRuns: RecentRun[]
   openRecent: (recent: RecentRun) => Promise<void>
+  removeRecent: (id: string) => void
   activeRunId?: string
   runtime: ReturnType<typeof useRuntimeOptions>
   browsePath: (key: PathFieldKey, label: string) => void
@@ -279,10 +285,11 @@ function PrimarySidebar({
           <div className="tree-list">
             {recentRuns.length === 0 && <div className="tree-empty">No recent runs</div>}
             {recentRuns.map((recent) => (
-              <button key={recent.id} className={`tree-item ${recent.id === activeRunId ? 'is-selected' : ''}`} onClick={() => void openRecent(recent)} title={recent.request}>
+              <div key={recent.id} className={`tree-item ${recent.id === activeRunId ? 'is-selected' : ''}`} role="button" tabIndex={0} onClick={() => void openRecent(recent)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void openRecent(recent) } }} title={recent.request}>
                 <FileText size={15} className="file-icon" />
                 <span className="tree-item-copy"><span>{recent.request}</span><small>{formatRelativeDate(recent.createdAt)}</small></span>
-              </button>
+                <button type="button" className="tree-item-delete" title="Remove from recent" aria-label={`Remove ${recent.request} from recent`} onClick={(event) => { event.stopPropagation(); removeRecent(recent.id) }}><X size={13} /></button>
+              </div>
             ))}
           </div>
         </section>
@@ -409,14 +416,103 @@ function StageRow({ definition, state, run, now }: { definition: StageDefinition
         <StatusGlyph status={status} />
       </button>
       {started && expanded && (
-        <div className="stage-details" id={detailsId}>
-          <StageDetail label="Input parameters" value={stageInputs(run, definition.id)} />
-          <StageDetail label="Output result" value={state?.result ?? (state?.error ? { error: state.error } : null)} />
-          <div className="stage-result-summary"><div className="stage-detail-heading"><span>Execution summary</span><CopyButton label="execution summary" value={summary} /></div><p>{summary}</p></div>
-        </div>
+        <StageDetails detailsId={detailsId} run={run} definition={definition} state={state} summary={summary} />
       )}
     </article>
   )
+}
+
+function StageDetails({ detailsId, run, definition, state, summary }: {
+  detailsId: string
+  run: RunState | null
+  definition: StageDefinition
+  state?: StageState
+  summary: string
+}) {
+  const [view, setView] = useState<'interactive' | 'complete'>('interactive')
+  const input = stageInputs(run, definition.id)
+  const output = state?.result ?? (state?.error ? { error: state.error } : null)
+  const inputJson = JSON.stringify(input, null, 2) ?? 'null'
+  const outputJson = JSON.stringify(output, null, 2) ?? 'null'
+  return (
+    <div className="stage-details" id={detailsId}>
+      <div className="stage-io-bar">
+        <div className="stage-io-toggle" role="tablist" aria-label="Stage input and output view">
+          <button type="button" role="tab" aria-selected={view === 'interactive'} className={view === 'interactive' ? 'is-active' : ''} onClick={() => setView('interactive')}>Interactive</button>
+          <button type="button" role="tab" aria-selected={view === 'complete'} className={view === 'complete' ? 'is-active' : ''} onClick={() => setView('complete')}>Complete</button>
+        </div>
+      </div>
+      {view === 'interactive' ? (
+        <div className="stage-io-pair is-interactive">
+          <IoBlock label="Input parameters" value={input} json={inputJson} tone="input" />
+          <div className="io-arrow" aria-hidden="true"><ArrowRight size={16} /></div>
+          <IoBlock label="Output result" value={output} json={outputJson} tone="output" />
+        </div>
+      ) : (
+        <div className="stage-io-pair is-complete">
+          <StageDetail label="Input parameters" value={input} />
+          <StageDetail label="Output result" value={output} />
+        </div>
+      )}
+      <div className="stage-result-summary"><div className="stage-detail-heading"><span>Execution summary</span><CopyButton label="execution summary" value={summary} /></div><p>{summary}</p></div>
+    </div>
+  )
+}
+
+function IoBlock({ label, value, json, tone }: { label: string; value: unknown; json: string; tone: 'input' | 'output' }) {
+  return (
+    <div className={`io-block io-${tone}`}>
+      <div className="stage-detail-heading"><span>{label}</span><CopyButton label={label} value={json} /></div>
+      <div className="io-tree">{value == null ? <span className="json-empty">null</span> : <JsonNode value={value} depth={0} />}</div>
+    </div>
+  )
+}
+
+function JsonNode({ name, value, depth }: { name?: string; value: unknown; depth: number }) {
+  const [open, setOpen] = useState(depth < 1)
+  const isContainer = value !== null && typeof value === 'object'
+  if (!isContainer) {
+    return (
+      <div className="json-row json-leaf">
+        {name !== undefined && <span className="json-key">{name}:</span>}
+        <span className={`json-value json-${primitiveType(value)}`}>{formatPrimitive(value)}</span>
+      </div>
+    )
+  }
+  const entries: Array<readonly [string, unknown]> = Array.isArray(value)
+    ? value.map((item, index) => [String(index), item] as const)
+    : Object.entries(value as Record<string, unknown>)
+  const preview = Array.isArray(value) ? `Array(${value.length})` : `{${entries.length} keys}`
+  return (
+    <div className="json-node">
+      <button type="button" className="json-toggle" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        {name !== undefined && <span className="json-key">{name}:</span>}
+        <span className="json-preview">{preview}</span>
+      </button>
+      {open && (
+        <div className="json-children">
+          {entries.length === 0
+            ? <span className="json-empty">{Array.isArray(value) ? '[ ]' : '{ }'}</span>
+            : entries.map(([key, child]) => <JsonNode key={key} name={key} value={child} depth={depth + 1} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function primitiveType(value: unknown): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') return 'string'
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'boolean') return 'boolean'
+  return 'literal'
+}
+
+function formatPrimitive(value: unknown): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string') return JSON.stringify(value)
+  return String(value)
 }
 
 function StageDetail({ label, value }: { label: string; value: unknown }) {
