@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, AlertTriangle, Archive, BarChart3, Bell, Braces, Check, CheckCheck, ChevronDown,
-  ChevronRight, Circle, Code2, FileText, Files, FolderOpen, GitBranch,
-  HardDriveDownload, History, LockKeyhole, MoreHorizontal, PanelBottom, Play,
-  PlayCircle, Plus, Copy, Radar, Radio, Search, Settings, ShieldCheck,
+  Activity, AlertTriangle, Archive, BarChart3, Braces, Check, CheckCheck, ChevronDown,
+  ChevronRight, Circle, FileText, FolderOpen, GitBranch,
+  HardDriveDownload, LockKeyhole, Play,
+  PlayCircle, Plus, Copy, Radar, Radio, ShieldCheck,
   Smartphone, SquareTerminal, StopCircle, Target, XCircle,
 } from 'lucide-react'
 import './App.css'
@@ -135,7 +135,6 @@ export default function App() {
       <TitleBar serviceOnline={serviceOnline} onNewRun={newRun} hasRun={Boolean(service.run)} />
 
       <div className={`vscode-workbench ${showDevicePreview ? 'has-device-preview' : ''}`}>
-        <ActivityBar />
         <PrimarySidebar
           form={form}
           patchForm={patchForm}
@@ -193,34 +192,16 @@ export default function App() {
 function TitleBar({ serviceOnline, onNewRun, hasRun }: { serviceOnline: boolean | null; onNewRun: () => void; hasRun: boolean }) {
   return (
     <header className="titlebar">
-      <div className="titlebar-menu" aria-label="Application menu">
-        <Code2 size={16} className="titlebar-logo" />
-        <button>File</button><button>Run</button><button>View</button><button>Help</button>
+      <div className="titlebar-brand">
+        <span className="brand-mark">H</span>
+        <span className="brand-name">ArkAnalyzer-HapRay</span>
       </div>
-      <div className="command-center"><Search size={13} /><span>Controllable HapRay</span></div>
       <div className="titlebar-actions">
         <span className={`service-dot ${serviceOnline ? 'is-online' : serviceOnline === false ? 'is-offline' : ''}`} />
-        {hasRun && <button className="icon-button" onClick={onNewRun} title="New run"><Plus size={15} /></button>}
-        <button className="icon-button" title="Layout controls"><PanelBottom size={15} /></button>
+        <span className="service-label">{serviceOnline ? 'Service online' : serviceOnline === false ? 'Service offline' : 'Connecting…'}</span>
+        {hasRun && <button className="ghost-button" onClick={onNewRun} title="New run"><Plus size={15} /> New run</button>}
       </div>
     </header>
-  )
-}
-
-function ActivityBar() {
-  return (
-    <nav className="activitybar" aria-label="Workbench activities">
-      <div className="activitybar-top">
-        <button className="activity-button is-active" title="Explorer" aria-label="Explorer"><Files size={24} /></button>
-        <button className="activity-button" title="Search" aria-label="Search"><Search size={23} /></button>
-        <button className="activity-button" title="Run and Debug" aria-label="Run and Debug"><Play size={23} /></button>
-        <button className="activity-button" title="Run history" aria-label="Run history"><History size={23} /></button>
-      </div>
-      <div className="activitybar-bottom">
-        <button className="activity-button" title="Notifications" aria-label="Notifications"><Bell size={22} /></button>
-        <button className="activity-button" title="Manage" aria-label="Manage"><Settings size={23} /></button>
-      </div>
-    </nav>
   )
 }
 
@@ -245,7 +226,7 @@ function PrimarySidebar({
 }) {
   return (
     <aside className="primary-sidebar">
-      <div className="sidebar-title"><span>EXPLORER</span><MoreHorizontal size={16} /></div>
+      <div className="sidebar-title"><span>EXPLORER</span></div>
       <div className="sidebar-scroll">
         <section className="sidebar-section is-open">
           <div className="section-header"><ChevronDown size={15} /><span>HAPRAY RUN</span></div>
@@ -318,9 +299,6 @@ function EditorTabs({ run }: { run: RunState | null }) {
         <span>{run ? `${shortId(run.id)}.hapray` : 'workflow.hapray'}</span>
         <span className={`tab-dirty ${run?.status === 'running' ? 'is-live' : ''}`} />
       </div>
-      <div className="editor-tab-spacer" />
-      <button className="editor-action" title="Split editor"><Code2 size={15} /></button>
-      <button className="editor-action" title="More actions"><MoreHorizontal size={16} /></button>
     </div>
   )
 }
@@ -487,7 +465,7 @@ function FindingsSidebar({ run, device, previewOpen, togglePreview }: {
           {previewOpen ? 'Hide' : 'Monitor'}
         </button>
       </div>
-      <div className="secondary-tabs"><button className="is-active">FINDINGS</button><button>OUTLINE</button><MoreHorizontal size={15} /></div>
+      <div className="secondary-tabs"><button className="is-active">FINDINGS</button></div>
       <div className="secondary-toolbar"><span>{problems} Problems</span><span>{findings.length - problems} Observations</span></div>
       <div className="findings-list">
         {findings.length === 0 && <div className="welcome-placeholder"><Target size={28} /><strong>No findings yet</strong><p>Structured findings appear here as analysis stages complete.</p></div>}
@@ -538,8 +516,6 @@ function BottomPanel({ tab, setTab, run, events }: { tab: PanelTab; setTab: (tab
         <button className={tab === 'events' ? 'is-active' : ''} onClick={() => setTab('events')}>EVENTS <span>{events.length}</span></button>
         <button className={tab === 'sessions' ? 'is-active' : ''} onClick={() => setTab('sessions')}>SESSIONS <span>{sessionCount}</span></button>
         <button className={tab === 'artifacts' ? 'is-active' : ''} onClick={() => setTab('artifacts')}>ARTIFACTS <span>{run?.artifacts.length ?? 0}</span></button>
-        <button>OUTPUT</button>
-        <div className="panel-actions"><button title="Panel position"><PanelBottom size={14} /></button><button title="More actions"><MoreHorizontal size={15} /></button></div>
       </div>
       {tab === 'events' ? <EventTable events={events} running={run?.status === 'running'} /> : tab === 'sessions' ? <SessionTerminal run={run} events={events} /> : <ArtifactTable run={run} />}
     </section>
@@ -620,7 +596,7 @@ function StatusBar({ label, serviceOnline, run, connected, eventCount }: { label
         <span><AlertTriangle size={13} />{run?.findings.filter((finding) => finding.severity === 'P0' || finding.severity === 'P1').length ?? 0}</span>
       </div>
       <div className="statusbar-right">
-        <span>{connected ? 'SSE connected' : 'SSE idle'}</span><span>{eventCount} events</span><span>HapRay</span><Bell size={13} />
+        <span>{connected ? 'SSE connected' : 'SSE idle'}</span><span>{eventCount} events</span><span>HapRay</span>
         <span className="sr-only">Service status: {serviceOnline === null ? 'checking' : serviceOnline ? 'online' : 'offline'}</span>
       </div>
     </footer>
