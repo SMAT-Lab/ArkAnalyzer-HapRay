@@ -1,6 +1,6 @@
 ---
 name: hapray
-version: "1.5.7"
+version: "1.5.8"
 description: |
   Guides OpenHarmony/HarmonyOS HapRay performance analysis in six stages:
   setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
@@ -241,6 +241,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 1b | [setup-source.md](workflow/setup-source.md) | 7 步 + `scripts/validate-env.sh` |
 | 2 | [perf-collect.md](workflow/perf-collect.md) | 预设→perf；禁止默认 gui-agent；**产出 `report/`** |
 | 3（可选） | [gen-perf-report.md](workflow/gen-perf-report.md) | **`update --so_dir`** 符号恢复（仅按需，默认 Agent；未提则跳过） |
+| 3b（可选） | [symbol-recovery-standalone.md](workflow/symbol-recovery-standalone.md) | **三参数轻量**：仅 `perf.data` + SO + HTML；无源码/无 report 树；dist `symbol-recovery.exe` + Agent |
 
 ---
 
@@ -327,7 +328,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 cd <REPO_ROOT>/perf_testing
 uv run python -m scripts.main prepare --run_testcases "PerfLoad_<用例名>"
 uv run python -m scripts.main perf \
-  --run_testcases "PerfLoad_<用例名>" --apps <包名> --round 1 \
+  --run_testcases "PerfLoad_<用例名>" --round 1 \
   --result-file <PROJECT_ROOT>/hapray-tool-result.json
 # perf 已产出 <用例>/report/ 全套分析器数据（summary.json、more_flame_graph.json、trace_*.json…）
 # macOS 已 ensure-workspace-layout 时报告已在 <PROJECT_ROOT>/reports/；

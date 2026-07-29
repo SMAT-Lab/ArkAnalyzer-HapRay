@@ -81,6 +81,8 @@
 3. 完成 **§7.1.5 UI 映射探测** 后，将步骤映射为脚本操作：有稳定 `id`/文案时用 `touch_by_id` / `touch_by_text`；**ID 全空**时仅用 **坐标**（`touch_by_coordinates` + `source_screen_*`），**禁止**臆造 id 或盲用文案。  
 4. 轨迹记录：`script_authored_from=source`、`source_paths=[...]`、`ui_mapping_mode=`、`app_specific_rationale=`。
 
+> **Token 优化提示（源码分析 subagent）**：使用 Task/explore subagent 分析源码时，在 prompt 中明确要求 **「仅返回与测试场景直接相关的 UI 组件信息，限制在 500 字以内」**，包括：入口 Ability 名、关键按钮的 accessibilityText/文案、页面导航路径、是否存在 `.id()` 属性。避免返回完整的字符串资源表、所有页面列表等冗余信息。预估节省 ~15% token。
+
 **B 无源码 — 编写前（MUST）**
 
 1. **包名**：`hdc list targets`；`hdc shell bm dump -n <包名>` 确认 `app_package`。  
@@ -112,6 +114,14 @@ uv run python -m scripts.main ui \
 hdc shell hidumper -s RenderService -a screen
 # 解析 render size / render resolution= WxH
 ```
+
+> **Token 优化提示（UI 探测快速模式）**：Inspector JSON 文件通常 100KB+，完整拉取并解析消耗大量 token。**快速模式**：直接在设备上 dump 并用 grep 提取关键信息，无需拉取完整文件：
+> ```bash
+> # 一行命令完成 UI 探测：dump + grep clickable/text/bounds/id
+> hdc -t <SN> shell uitest dumpLayout
+> hdc -t <SN> shell cat /data/local/tmp/layout_*.json | grep -oP '"clickable":"true"|"text":"[^"]*"|"id":"[^"]*"|"bounds":"[^"]*"'
+> ```
+> 仅当需要完整组件树分析时才拉取 JSON 文件到本地。预估节省 ~10% token。
 
 **解析与判定**（结构同 `haptest/state_manager.py` 中 Inspector：`attributes.id`、`text`、`clickable`、`bounds`）：
 
@@ -297,7 +307,6 @@ uv run python -m scripts.main prepare \
 cd <REPO_ROOT>/perf_testing
 uv run python -m scripts.main perf \
   --run_testcases "PerfLoad_<应用简称>_<编号>" \
-  --apps <包名> \
   --round 1 \
   -o ./reports
 ```

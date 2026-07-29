@@ -1,0 +1,34 @@
+{
+  "name": "controllable-hapray",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "dashboard"
+  ],
+  "description": "Web application for observable, controllable HapRay workflows powered by OpenCode",
+  "scripts": {
+    "analyze": "tsx src/cli.ts",
+    "build": "npm run build:server && npm run dashboard:build",
+    "build:server": "tsc -p tsconfig.json",
+    "dashboard:build": "npm --workspace controllable-hapray-dashboard run build",
+    "dashboard:dev": "npm --workspace controllable-hapray-dashboard run dev",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/src/main.js",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "1.18.1",
+    "opencode-ai": "1.18.1",
+    "undici": "^6.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

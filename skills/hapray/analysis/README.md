@@ -10,9 +10,10 @@
 
 | ID | 文件 | 适用场景 | 摘要 |
 |----|------|----------|------|
-| `high-load` | [`high-load-analysis.md`](high-load-analysis.md) | **阶段4主线**：高 CPU 指令数、未知瓶颈；**不用** `summary.json` 作主线 | `perf_sample` 聚合 + 静态 SO 交叉 |
+| `high-load` | [`high-load-analysis.md`](high-load-analysis.md) | **阶段4主线**：高 CPU 指令数、未知瓶颈；**不用** `summary.json` 作主线 | `report/*.json` 优先 + 保底 `perf_sample` SQL + 静态 SO 交叉 |
 | `scroll-jank` | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | 列表/首页 **滑动**、周期性卡顿、掉帧 | `trace.db`、`frame_slice`、`HandleDragUpdate` |
 | `symbol-recovery` | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 热点仍为 `libxxx.so+0x…`；触发可选阶段3 `update --so_dir` | SymRecover venv；Radare2 **建议** |
+| `symbol-recovery-standalone` | [`../workflow/symbol-recovery-standalone.md`](../workflow/symbol-recovery-standalone.md) | **仅三参数**：`perf.data` + SO + HTML；无源码/无 report 树；dist 二进制 + Agent | 不经过 `update` |
 
 **阶段 5（非本目录）**：多信号综合 root-cause（CLI + Agent 补充深挖）→ [`../root-cause/comprehensive.md`](../root-cause/comprehensive.md)
 

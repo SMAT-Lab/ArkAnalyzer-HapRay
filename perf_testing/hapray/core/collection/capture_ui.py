@@ -114,7 +114,7 @@ class CaptureUI:
 
             # 执行hdc shell uitest screenCap命令
             result = self.driver.shell('uitest screenCap')
-            Log.info(f'截屏命令输出: {result}')
+            Log.debug(f'截屏命令输出: {result}')
 
             # 解析截屏文件路径
             if 'ScreenCap saved to' in result:
@@ -192,7 +192,7 @@ class CaptureUI:
         try:
             # 执行hidumper命令获取Focus window信息
             result = self.driver.shell("hidumper -s WindowManagerService -a '-a'")
-            Log.info(f'hidumper命令输出: {result}')
+            Log.debug(f'hidumper命令输出: {result}')
 
             # 解析Focus window id
             # 查找 "Focus window: " 后面的数字
@@ -230,7 +230,7 @@ class CaptureUI:
 
             # 执行命令并获取结果
             result = self.driver.shell(dump_cmd)
-            Log.info(f'hidumper命令输出: {result}')
+            Log.debug(f'hidumper命令输出: {result}')
 
             # 从结果中解析zip文件路径
             # 格式：The result is:/data/log/hidumper/20260112-114308-970.zip
