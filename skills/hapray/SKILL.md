@@ -1,6 +1,6 @@
 ---
 name: hapray
-version: "1.5.7"
+version: "1.5.8"
 description: |
   Guides OpenHarmony/HarmonyOS HapRay performance analysis in six stages:
   setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
