@@ -14,6 +14,23 @@ description: |
 
 > **包结构**：`SKILL.md` + `workflow/` + `analysis/` + `root-cause/` + `report/` + [`schemas/`](schemas/hapray-tool-result.md)（CLI 契约；发布包无 `docs/` 时以 Schema 为准）。
 
+## 自动升级（每次加载 MUST，唯一的 §0 前 Shell 豁免）
+
+在询问 §0 路径、执行任何 HapRay 命令或读取阶段文档前，先执行一次：
+
+```bash
+python <SKILL_DIR>/scripts/update_skill.py --skill-dir <SKILL_DIR>
+```
+
+- 输出 `status=updated`：当前 Skill 已原子升级，**MUST 重新读取新版 `SKILL.md`**，再按新版规则继续。
+- 输出 `status=current`：已是最新稳定版本，继续当前流程。
+- 输出 `status=failed`：网络、远端或文件校验失败；更新器保留/回滚当前版本，记录警告后继续，不阻塞离线使用。
+- 输出 `status=disabled`：用户通过 `HAPRAY_SKILL_AUTO_UPDATE=0` 明确关闭自动升级，继续当前流程。
+- 输出 `status=source_checkout`：当前路径是 ArkAnalyzer-HapRay 源码工作树；为避免覆盖开发改动，不执行目录替换，应通过 Git 更新源码。
+- 只允许此更新命令在 `path_prompt_done=false` 时执行；它不得运行 HapRay、访问项目数据或写入 `<PROJECT_ROOT>`。
+
+更新器仅接受 GitCode 仓库的稳定语义版本 tag，逐文件校验 Git blob SHA，并在 Skill 同级目录完成暂存、校验、原子替换和失败回滚。可用 `--check-only` 只检查，不安装。
+
 ## 六阶段流水线
 
 > **核心变更（v1.6，阶段骨架不变，仅改语义）**：`perf` 已产出 `report/` 下全部分析器数据（`summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json`、`hapray_report.*`）。**阶段 3 `gen-perf-report`（`update` 符号恢复）从「必跑」降为「按需」**：用户明确要求符号恢复、或需要符号级热点/火焰图 stripped 时执行，否则**跳过阶段 3**，直接进入阶段 4 读 `report/` 做高负载分析。**阶段 5 root-cause 脱离 `update`**（独立 CLI，默认 `--checker comprehensive` 多信号综合 + Agent 补充深挖）。
@@ -84,7 +101,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 >
 > | 状态 | 允许 | 禁止 |
 > |------|------|------|
-> | `path_prompt_done=false` | §0 对话 | **一切** Shell |
+> | `path_prompt_done=false` | 自动升级命令、§0 对话 | 除 `scripts/update_skill.py` 外的**一切** Shell |
 > | `path_prompt_done=true` 且 `skill_read_done=false` | Read 主 SKILL + 阶段文档 | **一切** Shell |
 > | 两者均为 `true` | 按 §11 执行 | 臆造路径；符号恢复缺 §0 的 `--so_dir`；root-cause 缺 §0 的源码路径；**未** `ensure-workspace-layout` 就跑 CLI |
 >
