@@ -4,6 +4,21 @@ Code-oriented Performance Analysis for OpenHarmony Apps
 ## Introduction
 ArkAnalyzer-HapRay is a tool designed for performance analysis of OpenHarmony applications. It provides detailed insights into app performance, helping developers optimize their applications for better user experience.
 
+## Publication
+The optimization-detection method used by ArkAnalyzer-HapRay's `opt` command has been accepted by **ASE 2026**; see the arXiv preprint: [Source-Free Detection and Impact Analysis of Compiler Optimization Problems in Mobile Applications](https://arxiv.org/abs/2606.23512).
+
+```bibtex
+@misc{hu2026sourcefree,
+  author = {Hu, Han and Xie, Xiaoheng and Sun, Bo and Gu, Jian and Fan, Gang and Li, Li},
+  title = {Source-Free Detection and Impact Analysis of Compiler Optimization Problems in Mobile Applications},
+  year = {2026},
+  eprint = {2606.23512},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.SE},
+  url = {https://arxiv.org/abs/2606.23512}
+}
+```
+
 ## Documentation
 For more detailed information, please refer to the following documents:
 - [使用前准备](docs/使用说明.md) - Pre-Use Preparation
