@@ -191,9 +191,24 @@ git push <remote-skill-url> publish-hapray:main
 - Skill 正文中的 **环境版本**（Node、Python）以主仓库根目录 **`.nvmrc`、`.python-version`、`package.json` 的 `engines`** 为准；Skill 内勿写死易过期的小版本号，可写「见仓库锚点文件」。
 - **`hapray/SKILL.md` YAML `version`**：与当前对外 **GitCode Release 锚定 tag**（如 `v1.5.4`）对齐，作为 **默认直链 tag**（不再依赖发布页/latest）；发新版 Release 后须同步改该字段及正文示例直链。非锚定版本由用户提供整链或环境变量 `HAPRAY_RELEASE_TAG`。
 
+### 自动升级
+
+从包含 `scripts/update_skill.py` 的版本开始，HapRay Skill 每次加载时会先检查 GitCode 稳定语义版本 tag。发现更高版本后，更新器通过 Contents API 下载完整 `skills/hapray/`，校验 Git blob SHA 和新版 `SKILL.md` 版本，再原子替换安装目录；下载或替换失败会保留/回滚当前版本。
+
+```bash
+# 手动执行同一更新流程
+python skills/hapray/scripts/update_skill.py --skill-dir skills/hapray
+
+# 只检查是否有新版
+python skills/hapray/scripts/update_skill.py --skill-dir skills/hapray --check-only
+```
+
+设置 `HAPRAY_SKILL_AUTO_UPDATE=0` 可关闭自动升级。更新检查失败默认不阻塞 Skill 的离线使用；维护者或 CI 可追加 `--strict` 将失败转为非零退出码。更新器检测到 ArkAnalyzer-HapRay 源码工作树时不会替换目录，避免覆盖开发改动，此时应通过 Git 更新源码。
+
 ## 维护清单（发布前）
 
 - [ ] `SKILL.md` 的 `description` 含足够触发词（HapRay、鸿蒙性能、perf、HAP、SO/LTO 等）。
 - [ ] `hapray/SKILL.md` 顶部 `version` 与 GitCode 当前 Release tag 一致；正文 **releases/download** 示例直链已核对（不要求维护「发布页」流程）。
+- [ ] `python skills/hapray/scripts/test_update_skill.py` 通过；以旧版本夹具验证可升级到当前版本，并覆盖下载失败、原子替换失败回滚与源码工作树保护。
 - [ ] 命令与 `README.md`、`docs/使用说明.md` 一致；契约参数见 `docs/工具契约式输入输出方案.md`。
 - [ ] 若 CLI 有破坏性变更，同步更新本目录下对应 skill。
