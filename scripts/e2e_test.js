@@ -880,6 +880,38 @@ async function runE2ETests() {
 
         console.log('✓ 所有必需的工具目录都存在\n');
 
+        // perf-testing：devicetest uitest_agent natives（缺 arm64 .so 会导致真机 UI RPC Push file failed）
+        const nativeDir = path.join(
+            TOOLS_DIR,
+            'perf-testing',
+            '_internal',
+            'devicetest',
+            'res',
+            'prototype',
+            'native'
+        );
+        checkDirectoryExists(nativeDir, 'devicetest prototype/native');
+        const nativeFiles = fs.readdirSync(nativeDir).filter((name) =>
+            fs.statSync(path.join(nativeDir, name)).isFile()
+        );
+        if (nativeFiles.length < 5) {
+            throw new Error(
+                `devicetest prototype/native 文件数应为 >= 5，实际 ${nativeFiles.length}: ${nativeFiles.join(', ') || '(空)'}`
+            );
+        }
+        for (const required of ['uitest_agent_v1.2.2.so', 'uitest_agent_v1.1.9.x86_64_so']) {
+            checkFileExists(path.join(nativeDir, required), `devicetest ${required}`);
+        }
+        const recorderDir = path.join(TOOLS_DIR, 'perf-testing', '_internal', 'devicetest', 'res', 'recorder');
+        checkDirectoryExists(recorderDir, 'devicetest recorder');
+        const scrcpyFiles = fs.readdirSync(recorderDir).filter(
+            (name) => name.startsWith('libscrcpy_server') && name.endsWith('.z.so')
+        );
+        if (scrcpyFiles.length < 1) {
+            throw new Error(`devicetest recorder 缺少 libscrcpy_server*.z.so`);
+        }
+        console.log(`✓ devicetest natives: ${nativeFiles.length} files in prototype/native, ${scrcpyFiles.length} scrcpy libs\n`);
+
         // 2. 测试主程序帮助信息
         console.log('🔧 测试主程序功能...');
         runCommand(`${EXECUTABLE} --help`, '主程序帮助信息', { silent: true });

@@ -671,8 +671,7 @@ class EventCountAnalyzer:
             cached_results = self._load_disasm_cache(cache_dir, cache_key)
             if cached_results is not None:
                 logger.info(
-                    '♻️  命中反汇编缓存，跳过 Step 4 重复反汇编（%d 个函数）；'
-                    'import 仅做名称回填，无需重跑 radare2',
+                    '♻️  命中反汇编缓存，跳过 Step 4 重复反汇编（%d 个函数）；import 仅做名称回填，无需重跑 radare2',
                     len(cached_results),
                 )
                 return cached_results

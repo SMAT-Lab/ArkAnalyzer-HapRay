@@ -8,7 +8,7 @@
     "postinstall": "npm run setup",
     "setup": "node ../scripts/python_setup.js && node ./setup.js",
     "build": "npm run build:onedir",
-    "postbuild": "webpack --config webpack.config.js && node scripts/copy-testcases-to-dist.mjs",
+    "postbuild": "webpack --config webpack.config.js && node scripts/copy-testcases-to-dist.mjs && node scripts/assert-devicetest-natives.mjs",
     "build:onedir": "uv run pyinstaller -y --distpath ../dist/tools main.spec",
     "build:python": "npm run build:onedir",
     "lint": "uv run --group dev tox -e lint",

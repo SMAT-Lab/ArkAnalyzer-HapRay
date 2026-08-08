@@ -1,7 +1,6 @@
 import time
 
-from hypium import BY
-from hypium import Rect
+from hypium import BY, Rect
 
 from hapray.core.perf_testcase import PerfTestCase
 
