@@ -1,7 +1,5 @@
 import time
 
-from hypium import BY
-
 from hapray.core.perf_testcase import PerfTestCase
 
 

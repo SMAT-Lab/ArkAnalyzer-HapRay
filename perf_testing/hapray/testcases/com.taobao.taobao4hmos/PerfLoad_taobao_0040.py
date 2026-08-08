@@ -1,6 +1,7 @@
+from hypium import BY
+
 from hapray.core.perf_testcase import PerfTestCase
 
-from hypium import BY
 
 class PerfLoad_taobao_0040(PerfTestCase):
     def __init__(self, controllers):

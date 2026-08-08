@@ -21,6 +21,7 @@ with_source (enhanced)
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -580,7 +581,7 @@ def _render_skip_llm_report(
                 lines.append(f'- 明细条目数: {len(items)}')
 
             lines.append('')
-            lines.append(f'**Pending Agent Inference** — 需要 Agent 基于上述证据推断根因、定位源码、给出修复建议。')
+            lines.append('**Pending Agent Inference** — 需要 Agent 基于上述证据推断根因、定位源码、给出修复建议。')
             lines.append('')
     else:
         lines.append('## Pending Agent Inference')
@@ -1311,10 +1312,8 @@ def apply_agent_result_to_report(report_dir: str | Path) -> bool:
     # Clear pending marker since agent result has been applied
     pending_marker = report_sub / 'root_cause_pending.json'
     if pending_marker.is_file():
-        try:
+        with contextlib.suppress(OSError):
             pending_marker.unlink()
-        except OSError:
-            pass
     logging.info('Root-cause report refreshed from agent result: %s', output_md)
     return True
 
