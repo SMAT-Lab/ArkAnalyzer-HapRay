@@ -1,0 +1,21 @@
+diff --git a/hypium/uidriver/ohos/app_manager.py b/hypium/uidriver/ohos/app_manager.py
+--- a/hypium/uidriver/ohos/app_manager.py
++++ b/hypium/uidriver/ohos/app_manager.py
+@@ -41,12 +41,14 @@
+ 
+ def _is_launcher_ability(ability_info: dict):
+     """判断是否支持桌面启动"""
+-    skills = ability_info['skills']
++    skills = ability_info.get('skills') or []
+     if len(skills) <= 0:
+         return False
++    # 旧 SDK: action.system.home；HarmonyOS NEXT / wantConstant.ACTION_HOME: ohos.want.action.home
++    launcher_actions = {'action.system.home', 'ohos.want.action.home'}
+     for skill in skills:
+-        actions = skill.get("actions", [])
+-        if "action.system.home" in actions:
++        actions = skill.get('actions') or []
++        if launcher_actions.intersection(actions):
+             return True
+     return False
+ 
