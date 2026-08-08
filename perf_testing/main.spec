@@ -89,11 +89,20 @@ try:
 except Exception as e:
     print(f"Warning: collect_data_files('hypium') failed: {e}")
 
-# devicetest 的 uitest_agent *.so 等在 res/prototype/native（非 .py）；仅 collect_submodules 不会打入，frozen 下会缺文件导致 hdc push 失败
+# devicetest 的 res（uitest_agent *.so、scrcpy *.z.so、template 等）须整目录打入。
+# 不能用 collect_data_files('devicetest')：默认排除 ALL_SUFFIXES；Unix 上含 .so，
+# 导致 arm64 uitest_agent_v*.so / libscrcpy_server*.z.so 不进 datas，macOS/Linux
+# 发布包真机 UI RPC 初始化失败（Windows 因 ALL_SUFFIXES 用 .pyd 而不受影响）。
+# 也不用 collect_dynamic_libs：会对 .so 做本机依赖分析，跨架构不可靠。
 try:
-    datas += collect_data_files('devicetest')
+    import devicetest as _devicetest_pkg
+    _devicetest_res = os.path.join(os.path.dirname(_devicetest_pkg.__file__), 'res')
+    if os.path.isdir(_devicetest_res):
+        datas.append((_devicetest_res, 'devicetest/res'))
+    else:
+        print(f"Warning: {_devicetest_res} missing; uitest_agent natives will not be bundled")
 except Exception as e:
-    print(f"Warning: collect_data_files('devicetest') failed: {e}")
+    print(f"Warning: bundling devicetest/res failed: {e}")
 
 # xdevice 在启动时用 importlib.metadata.entry_points 加载 driver（如 DeviceTest→device_test）等插件；
 # 未打入 .dist-info 时 frozen 环境找不到 entry_points，报「驱动插件未安装」
