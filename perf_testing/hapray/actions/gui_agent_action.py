@@ -146,10 +146,14 @@ class GuiAgentAction:
             parser.error('Must specify --app')
 
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        output = os.path.abspath(parsed_args.output) if parsed_args.output else os.getcwd()
-        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
-        if sys.platform == 'darwin':
-            output = str(get_user_data_root('gui_agent') / os.path.basename(output))
+        if parsed_args.output:
+            # 用户显式指定 --output（如 GUI exec_cwd）时尊重该路径
+            output = os.path.abspath(parsed_args.output)
+        else:
+            # 未传 output：macOS 下避免 cwd 落在只读 .app 包内，回退到用户目录
+            output = os.getcwd()
+            if sys.platform == 'darwin':
+                output = str(get_user_data_root('gui_agent') / os.path.basename(output))
         reports_path = os.path.join(output, 'reports', timestamp)
 
         # Create configuration
