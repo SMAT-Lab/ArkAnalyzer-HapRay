@@ -4,15 +4,18 @@ version: "1.5.8"
 description: |
   Guides OpenHarmony/HarmonyOS HapRay performance analysis in six stages:
   setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
+  Memory analysis is a parallel track when --memory is enabled (memory-collect → memory-analysis → memory-deliverable).
   Symbol recovery (update) is triggered when user explicitly requests it or when hotspots are stripped; skipped otherwise.
-  Use when the user mentions HapRay, 鸿蒙性能, perf testing, 高负载分析, symbol recovery, or root-cause.
-  触发词含：鸿蒙性能、高负载分析、空刷根因、符号恢复。
+  Use when the user mentions HapRay, 鸿蒙性能, perf testing, 高负载分析, 内存分析, symbol recovery, or root-cause.
+  触发词含：鸿蒙性能、高负载分析、内存分析、内存泄漏、memory leak、空刷根因、符号恢复。
   Hard gates: no shell until path_prompt_done; then Read this SKILL plus the current stage doc before CLI.
 ---
 
 # HapRay 引导式工作流
 
 > **包结构**：`SKILL.md` + `workflow/` + `analysis/` + `root-cause/` + `report/` + [`schemas/`](schemas/hapray-tool-result.md)（CLI 契约；发布包无 `docs/` 时以 Schema 为准）。
+>
+> **双主线**：high-load（CPU 指令数，默认主线）+ memory（Native 内存，`--memory` 采集时主线）。两者数据源独立、可联合采集（`perf --memory`）后分别分析。
 
 ## 自动升级（每次加载 MUST，唯一的 §0 前 Shell 豁免）
 
@@ -41,9 +44,9 @@ python <SKILL_DIR>/scripts/update_skill.py --skill-dir <SKILL_DIR>
 | **1 setup** | `workflow/setup-binary.md` / `setup-source.md` | build / 下载 | 环境就绪 |
 | **2 collect** | `workflow/perf-collect.md` | `perf` / `prepare` | `reports/<ts>/<用例>/report/` 全套分析器产物 |
 | **3 gen-perf-report（可选）** | `workflow/gen-perf-report.md` | **`update --so_dir`** | **符号恢复**：用户明确要求，或需要符号级热点/火焰图 stripped 时执行；否则**跳过** |
-| **4 analysis** | `analysis/README.md` → 子 Skill | **读 `report/` / SQL** | SO/符号/帧/线程/IPC/内存高负载热点、动静交叉、新发现 |
+| **4 analysis** | `analysis/README.md` → 子 Skill | **读 `report/` / SQL** | SO/符号/帧/线程/IPC/内存高负载热点、动静交叉、新发现；`--memory` 时并列做内存分析 |
 | **5 root-cause** | `root-cause/comprehensive.md` | **独立 `root-cause`** + Agent 补充深挖 | `root_cause.md`（多信号综合）+ Agent 源码级补充 |
-| **6 deliver** | `report/analysis-deliverable.md` | — | `reports/hapray-analysis-*.md`（高负载分析报告，融合根因） |
+| **6 deliver** | `report/analysis-deliverable.md` 或 `report/memory-deliverable.md` | — | `reports/hapray-analysis-*-load-*.md`（高负载）或 `*-memory-*.md`（内存专题），融合根因 |
 
 ```text
 §0 → 1 setup → 2 perf-collect → [3 gen-perf-report 可选符号恢复] → 4 analysis(读 report/) → 5 root-cause(独立·多信号综合) → 6 analysis-deliverable
@@ -114,11 +117,11 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 1. **必读**：本文件 `SKILL.md` 全文  
 2. **按阶段追加**（至少一项）：
    - 1 setup → [setup-binary](workflow/setup-binary.md) 和/或 [setup-source](workflow/setup-source.md) + **`scripts/ensure-workspace-layout.sh`**
-   - 2 collect → [perf-collect](workflow/perf-collect.md)
+   - 2 collect → [perf-collect](workflow/perf-collect.md)（+ [memory-collect](workflow/memory-collect.md) 当 `--memory` 时）
    - 3 gen-perf-report → [gen-perf-report](workflow/gen-perf-report.md)（仅按需符号恢复，未提则跳过）
-   - 4 analysis → [analysis/README](analysis/README.md) + 触发的子 Skill（默认 [high-load](analysis/high-load-analysis.md)）
+   - 4 analysis → [analysis/README](analysis/README.md) + 触发的子 Skill（默认 [high-load](analysis/high-load-analysis.md)；`--memory` 时追加 [memory](analysis/memory-analysis.md)）
    - 5 root-cause → [root-cause/comprehensive](root-cause/comprehensive.md)
-   - 6 deliver → [report/analysis-deliverable](report/analysis-deliverable.md)
+   - 6 deliver → [report/analysis-deliverable](report/analysis-deliverable.md)（高负载）或 [report/memory-deliverable](report/memory-deliverable.md)（内存专题）
 
 ---
 
@@ -178,13 +181,15 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 用户请求
   ├─ ReadOnly → 跳过 §0；可读 4/5/6 文档解释产物
   ├─ SIMPLE   → §0 → 4 analysis(读 report/) → 5 root-cause? → 6 deliver
+  ├─ Memory   → §0 → 1 → 2(perf --memory) → [3 符号恢复?按需] → 4 analysis(memory + 可选 high-load) → 5 root-cause? → 6 memory-deliverable
   └─ Full     → §0 → 1 → 2 → [3 符号恢复?按需] → 4 analysis → 5 root-cause? → 6 deliver
 ```
 
 | 场景 | 阶段 Read |
 |------|-----------|
-| ReadOnly | 按需 analysis / root-cause / analysis-deliverable |
+| ReadOnly | 按需 analysis / root-cause / analysis-deliverable / memory-deliverable |
 | SIMPLE | analysis + root-cause? + analysis-deliverable（+ gen-perf-report 仅按需符号恢复） |
+| Memory | memory-collect + memory-analysis + root-cause? + memory-deliverable（+ high-load 联合采集时） |
 | Full | setup-* + perf-collect + analysis + root-cause? + analysis-deliverable（+ gen-perf-report 仅按需符号恢复） |
 
 ### TL;DR
@@ -195,11 +200,11 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 0.5 | — | Read 主 SKILL + 当前阶段 doc |
 | 0.25 | — | `ensure-workspace-layout.sh <PROJECT_ROOT>` |
 | 1 | 1 | 判轨 → setup-binary / setup-source |
-| 2 | 2 | perf-collect（产出 `report/` 全套分析器数据） |
+| 2 | 2 | perf-collect（产出 `report/` 全套分析器数据）；`--memory` 时附加内存采集（见 [memory-collect](workflow/memory-collect.md)） |
 | 3 | 3 | **仅按需** gen-perf-report：符号恢复 `update --so_dir`（要符号级热点 / 火焰图 stripped 时）；未提则**跳过** |
-| 4 | 4 | analysis：**读 `report/`** 做 high-load 分析（默认主线，不跑 update） |
+| 4 | 4 | analysis：**读 `report/`** 做 high-load 分析（默认主线，不跑 update）；`--memory` 时并列做 [memory](analysis/memory-analysis.md) 分析 |
 | 5 | 5 | root-cause：独立 `root-cause` CLI（多信号综合）+ Agent 补充深挖（借源码） |
-| 6 | 6 | analysis-deliverable 落盘（融合 CLI 根因 + Agent 补充） |
+| 6 | 6 | analysis-deliverable 落盘（融合 CLI 根因 + Agent 补充）；内存专题时用 [memory-deliverable](report/memory-deliverable.md) |
 
 ### 状态机
 
@@ -257,6 +262,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 1a | [setup-binary.md](workflow/setup-binary.md) | GitCode 直链；§5 自检 |
 | 1b | [setup-source.md](workflow/setup-source.md) | 7 步 + `scripts/validate-env.sh` |
 | 2 | [perf-collect.md](workflow/perf-collect.md) | 预设→perf；禁止默认 gui-agent；**产出 `report/`** |
+| 2m | [memory-collect.md](workflow/memory-collect.md) | **`--memory` 内存采集路由**：联合/纯内存/堆快照模式；`--memory` 采集时追加 Read |
 | 3（可选） | [gen-perf-report.md](workflow/gen-perf-report.md) | **`update --so_dir`** 符号恢复（仅按需，默认 Agent；未提则跳过） |
 | 3b（可选） | [symbol-recovery-standalone.md](workflow/symbol-recovery-standalone.md) | **三参数轻量**：仅 `perf.data` + SO + HTML；无源码/无 report 树；dist `symbol-recovery.exe` + Agent |
 
@@ -266,16 +272,18 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 - **Quick**：采集 + analysis（至少一个子 Skill，默认 high-load）+ 阶段 6 报告  
 - **Full**：analysis 三项逐一评估 + 阶段 5 多信号综合 root-cause（CLI + Agent 补充深挖）  
+- **Memory**：`--memory` 采集后 + analysis（memory 主线 + 可选 high-load）+ 阶段 6 内存专题报告（见 [`report/memory-deliverable.md`](report/memory-deliverable.md)）
 
 ---
 
 ## §5 analysis 路由（阶段 4）
 
-[`analysis/README.md`](analysis/README.md) 索引。`perf` 后**直接读 `report/`**（默认不跑 update），按序评估：`high-load` → `scroll-jank` → `symbol-recovery`；不满足则 `已跳过（原因）`。**high-load 为阶段 4 主线**。
+[`analysis/README.md`](analysis/README.md) 索引。`perf` 后**直接读 `report/`**（默认不跑 update），按序评估：`high-load` → `memory`（`--memory` 采集时）→ `scroll-jank` → `symbol-recovery`；不满足则 `已跳过（原因）`。**high-load 为阶段 4 主线；`--memory` 采集时 memory 为并列主线**。
 
 | 产物 / 信号 | 子 Skill |
 |-------------|----------|
 | 高负载 / 未知瓶颈（默认主线） | high-load |
+| `--memory` 采集 / 内存泄漏 / 未释放 / meminfo | memory（[`analysis/memory-analysis.md`](analysis/memory-analysis.md)） |
 | `trace.db` + 滑动/掉帧 | scroll-jank |
 | `libxxx.so+0x...`（需符号级） | symbol-recovery（触发可选阶段 3 `update --so_dir`） |
 
@@ -298,10 +306,13 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 分阶段 Read | 阶段 Read 清单 |
 | setup | workflow/setup-* |
 | 采集 | workflow/perf-collect |
+| 内存采集（`--memory`） | workflow/memory-collect |
 | 可选符号恢复 | workflow/gen-perf-report |
 | 高负载挖掘（阶段 4 主线） | analysis/* |
+| 内存分析（阶段 4 并列主线） | analysis/memory-analysis |
 | 多信号综合 root-cause（阶段 5，独立） | root-cause/comprehensive |
-| Agent 交付 | report/analysis-deliverable |
+| Agent 交付（高负载） | report/analysis-deliverable |
+| Agent 交付（内存专题） | report/memory-deliverable |
 
 ---
 
@@ -310,6 +321,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 > 前置：`path_prompt_done=true` 且 `skill_read_done=true`。
 
 §0 → Read 阶段 doc → 1 setup → 2 collect（产出 `report/`）→ [3 仅按需符号恢复 `update --so_dir`] → 4 analysis **读 `report/` 做 high-load 分析**（`hapray-tool-result.json` 取 `reports_path`；默认不跑 update）→ 5 root-cause（独立 CLI 多信号综合 + Agent 补充深挖，借源码）→ 6 [`analysis-deliverable`](report/analysis-deliverable.md) 落盘（**融合 CLI 根因 + Agent 补充**）。
+
+> **内存并行流程**：当 `perf --memory` 采集时，阶段 4 并列执行 [`analysis/memory-analysis.md`](analysis/memory-analysis.md)（读 `hapray_report.db:memory_*`），阶段 6 产出 [`report/memory-deliverable.md`](report/memory-deliverable.md)（`hapray-analysis-*-memory-*.md`）。内存流程与 high-load 共享 §0/1/2/5，仅在阶段 4 和 6 分叉为独立主线。纯内存模式（`--no-trace --no-perf --memory`）时 high-load 不可用，仅走内存主线。
 
 ---
 
@@ -323,6 +336,9 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 火焰图热点为 stripped 地址 | 阶段 3 按需 `update --so_dir`；否则标注「建议符号恢复」，SO/帧/线程级照常 |
 | 无源码（root-cause） | root-cause 降级为 analyze（仅证据无行号）或仅做 perf 产物级根因；空刷等可选信号缺失时 CLI 自动跳过该信号 |
 | `result-file` 损坏 | 仅证据报告 |
+| `--memory` 采集但 `memory_records` 为空 | 标注「内存采集失败（nativehook 未运行）」；检查 hiprofiler_cmd 日志；GC 分析仍可用（若有 perf.db + trace.db） |
+| 纯内存模式（`--no-trace --no-perf`） | high-load 跳过（无 `perf_sample`）；GC 分析跳过（无 `perf.db` + `trace.db`）；仅做 memory 主线分析 |
+| 内存 callchain 符号为 `[unknown]` | 标注「需 symbol-recovery」；按需触发阶段 3 `update --so_dir` 后重分析 |
 
 ---
 
@@ -374,6 +390,21 @@ uv run python -m scripts.main update \
 # 从 hapray-tool-result.json 取 reports_path，对 report/ 与 hiperf/step*/perf.db 做分析
 # 具体 SQL 与维度见 analysis/high-load-analysis.md
 sqlite3 <用例>/hiperf/step5/perf.db "PRAGMA table_info(perf_sample)"
+```
+
+### 阶段 4 analysis memory（`--memory` 采集时，与 high-load 并列）
+
+```bash
+# 检查内存数据是否可用
+sqlite3 <用例>/report/hapray_report.db "SELECT COUNT(*) FROM memory_records"
+# 具体 SQL 与维度见 analysis/memory-analysis.md
+```
+
+### 阶段 6 deliver（内存专题，`--memory` 采集时）
+
+```bash
+# 交付报告模板见 report/memory-deliverable.md
+# 命名：hapray-analysis-<YYYYMMDD>-<app>-memory-<suffix>.md
 ```
 
 ### 阶段 5 root-cause（独立，**脱离 update**，多信号综合）

@@ -59,7 +59,7 @@ CLI 的 `run_comprehensive_analysis` 按以下信号类别自动提取证据并�
 | `thread` | `redundant_thread_analysis.json` | suspect | 冗余线程 |
 | `ipc` | `trace_ipc_binder.json` | suspect | 高频 IPC/Binder 事务 |
 | `so-load` | `so_file_load.json` | suspect | SO 文件负载分布 |
-| `memory` | `hapray_report.db: memory_records` | suspect | 内存超额分配（未开 `--memory` 时不可用） |
+| `memory` | `hapray_report.db: memory_records` | suspect | 内存超额分配（未开 `--memory` 时不可用）。**CLI 仅提取 Top-N 分配组件**；Agent 补充深挖应参考 [`../analysis/memory-analysis.md`](../analysis/memory-analysis.md) 的未释放检测（`memory_report.xlsx` 的 `MemoryUnreleased` sheet）、meminfo 时序（`memory_meminfo` 表）、GC 压力关联（`gc_analyzer` 产物）做完整内存根因分析 |
 | `frame-stats` | `trace_frames.json` 等 | observation | 帧率/RS跳帧/Vsync异常 |
 | `ui-animate` | `ui_animate.json` | observation | 离树节点/超大图/动画 |
 | `fault-hilog` | `trace_fault_tree.json` 等 | observation | 故障树 + hilog 命中 |
@@ -76,7 +76,7 @@ CLI 自动分析受限于 LLM prompt 窗口和证据提取粒度，对以下场�
 | 阶段4 high-load 发现的 SO/符号热点需调用链追查 | 读 `perf_callchain` + 源码，追查调用链至业务入口 |
 | 冗余线程的线程池/Worker 创建点 | 源码中搜索线程创建代码 |
 | IPC 高频事务的调用点 | 源码中搜索 IPC 调用 |
-| 内存超额分配的分配热点 | 源码中搜索大对象/缓存分配 |
+| 内存超额分配的分配热点 | 源码中搜索大对象/缓存分配；**并参考** [`../analysis/memory-analysis.md`](../analysis/memory-analysis.md) 的未释放 callchain 分析 + meminfo 趋势 + GC 关联做完整内存根因 |
 | 组件复用率低的 LazyForEach/复用配置 | 源码中搜索组件定义与复用配置 |
 
 **禁止**：无源码依据的臆造行号；把阶段4未挖出的问题硬写成根因；只复述 CLI 报告而不覆盖其余维度。
