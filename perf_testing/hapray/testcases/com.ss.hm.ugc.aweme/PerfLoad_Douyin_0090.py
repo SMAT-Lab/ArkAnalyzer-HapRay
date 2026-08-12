@@ -59,12 +59,11 @@ class PerfLoad_Douyin_0090(PerfTestCase):
         self.touch_by_coordinates(858, 781, 1)
         self.execute_performance_step('抖音-商城浏览场景-step2商品详情页浏览', 30, step2)
 
-        for i in range(5):
+        for _i in range(5):
             if self.touch_by_text('团购'):
                 break
-            else:
-                self.swipe_to_back()
-                time.sleep(2)
+            self.swipe_to_back()
+            time.sleep(2)
 
         self.touch_by_text('团购')
         time.sleep(2)

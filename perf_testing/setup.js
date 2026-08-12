@@ -33,3 +33,5 @@ function run(command, args, cwd = projectDir) {
 
 // phone-agent 由 pyproject 依赖安装；对当前 venv 内 site-packages 的 device.py 打 swipe 补丁（路径由 Python 解析，跨 OS）
 run('uv', ['run', 'python', path.join(projectDir, 'scripts', 'patch_phone_agent_device.py')]);
+// hypium：识别 NEXT 桌面启动 action ohos.want.action.home（见 ../third-party/hypium-launcher-ability.diff）
+run('uv', ['run', 'python', path.join(projectDir, 'scripts', 'patch_hypium_app_manager.py')]);

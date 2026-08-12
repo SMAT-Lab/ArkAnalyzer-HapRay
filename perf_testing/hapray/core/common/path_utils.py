@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import shutil
 import sys
@@ -171,13 +173,53 @@ def harmony_cli_available() -> bool:
     return ok
 
 
+# 与 skills/hapray/scripts/ensure-workspace-layout.sh 一致：
+# reports/logs 落在工作区根下，其余落在 .hapray/ 下。
+_WORKSPACE_TOP_LEVEL_SUBDIRS = frozenset({'reports', 'logs'})
+
+# GUI exec_cwd / SKILL PROJECT_ROOT：显式工作区根，优先于 macOS 默认 ~/ArkAnalyzer-HapRay。
+ENV_HAPRAY_WORKSPACE = 'HAPRAY_WORKSPACE'
+
+
+def get_workspace_root() -> Path | None:
+    """
+    若设置了 HAPRAY_WORKSPACE 且目录存在，返回其绝对路径；否则 None。
+
+    GUI 在配置了 exec_cwd 时会注入该环境变量；CLI/SKILL 也可 export 后跳过符号链接。
+    """
+    raw = os.environ.get(ENV_HAPRAY_WORKSPACE, '').strip()
+    if not raw:
+        return None
+    root = Path(raw).expanduser()
+    try:
+        if root.is_dir():
+            return root.resolve()
+    except OSError:
+        pass
+    return None
+
+
+def workspace_subdir_path(workspace: Path, subdir: str) -> Path:
+    """将工具子目录映射到工作区路径（对齐 ensure-workspace-layout.sh）。"""
+    if subdir in _WORKSPACE_TOP_LEVEL_SUBDIRS:
+        return workspace / subdir
+    return workspace / '.hapray' / subdir
+
+
 def get_user_data_root(subdir: str) -> Path:
     """
     获取工具在当前平台下的用户数据根目录。
 
-    - macOS：固定放到用户主目录的 `~/ArkAnalyzer-HapRay/<subdir>` 下，避免 App 包 cwd 落在只读目录。
-    - 其他平台：仍然使用当前工作目录作为基准目录（向后兼容原有行为）。
+    优先级：
+    1. ``HAPRAY_WORKSPACE``（GUI ``exec_cwd`` / 显式工作区）：按 ensure-workspace-layout 布局落盘
+    2. macOS：``~/ArkAnalyzer-HapRay/<subdir>``（避免 App 包 cwd 只读；可被 SKILL 符号链接到工作区）
+    3. 其他平台：当前工作目录下的 ``<subdir>``
     """
+    workspace = get_workspace_root()
+    if workspace is not None:
+        root = workspace_subdir_path(workspace, subdir)
+        root.mkdir(parents=True, exist_ok=True)
+        return root
     if sys.platform == 'darwin':
         root = Path.home() / 'ArkAnalyzer-HapRay' / subdir
         root.mkdir(parents=True, exist_ok=True)
@@ -189,8 +231,9 @@ def get_log_file_path(log_file: str) -> str:
     """
     统一获取日志文件路径。
 
-    - macOS：`~/ArkAnalyzer-HapRay/logs/<log_file>`
-    - 其他平台：`./logs/<log_file>`（相对当前工作目录）
+    - 有 HAPRAY_WORKSPACE：``<workspace>/logs/<log_file>``
+    - macOS 默认：``~/ArkAnalyzer-HapRay/logs/<log_file>``
+    - 其他平台：``./logs/<log_file>``
     """
     base_dir = get_user_data_root('logs')
     return str(base_dir / log_file)
@@ -200,8 +243,9 @@ def get_reports_root() -> Path:
     """
     性能测试 reports 根目录：
 
-    - macOS：`~/ArkAnalyzer-HapRay/reports`
-    - 其他平台：`./reports`
+    - 有 HAPRAY_WORKSPACE：``<workspace>/reports``
+    - macOS 默认：``~/ArkAnalyzer-HapRay/reports``
+    - 其他平台：``./reports``
     """
     return get_user_data_root('reports')
 
@@ -210,8 +254,9 @@ def get_haptest_reports_root() -> Path:
     """
     HapTest reports 根目录：
 
-    - macOS：`~/ArkAnalyzer-HapRay/haptest_reports`
-    - 其他平台：`./haptest_reports`
+    - 有 HAPRAY_WORKSPACE：``<workspace>/.hapray/haptest_reports``
+    - macOS 默认：``~/ArkAnalyzer-HapRay/haptest_reports``
+    - 其他平台：``./haptest_reports``
     """
     return get_user_data_root('haptest_reports')
 
@@ -220,7 +265,8 @@ def get_runtime_root() -> Path:
     """
     运行期临时根目录（给第三方依赖用相对路径时兜底）。
 
-    - macOS：`~/ArkAnalyzer-HapRay/runtime`
-    - 其他平台：`./runtime`
+    - 有 HAPRAY_WORKSPACE：``<workspace>/.hapray/runtime``
+    - macOS 默认：``~/ArkAnalyzer-HapRay/runtime``
+    - 其他平台：``./runtime``
     """
     return get_user_data_root('runtime')

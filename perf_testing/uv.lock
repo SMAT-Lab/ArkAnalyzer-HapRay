@@ -485,7 +485,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.94.0" },
-    { name = "hypium", specifier = ">=6.0.7.210" },
+    { name = "hypium", specifier = ">=6.1.0.210" },
     { name = "jsonschema" },
     { name = "lxml" },
     { name = "numpy", specifier = "==1.26.4" },
@@ -542,7 +542,7 @@ wheels = [
 
 [[package]]
 name = "hypium"
-version = "6.0.7.210"
+version = "6.1.0.210"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lxml" },
@@ -552,7 +552,9 @@ dependencies = [
     { name = "xdevice-devicetest" },
     { name = "xdevice-ohos" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/50/3efa3bbd6b4d4f3b7509d4cd8047a0e83ec7e7133f2a4e0a9216a20a1eae/hypium-6.0.7.210.tar.gz", hash = "sha256:28faa5a33ead315aab9351b2c895e74ab1d88cf6344cba893c9dfe7ef5fd4871", size = 186099, upload-time = "2026-01-22T06:25:11.144Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b4/dc/f3b0abf2c518d11d57d8e9487026c133cc7eb0e3479af4b90d13c6db6169/hypium-6.1.0.210-py3-none-any.whl", hash = "sha256:cb85939bfb9f459fb61d0067108ef7aae15c7ca54fc095b42f64b05b9d247af5", size = 214812, upload-time = "2026-05-19T09:13:09.315Z" },
+]
 
 [[package]]
 name = "idna"

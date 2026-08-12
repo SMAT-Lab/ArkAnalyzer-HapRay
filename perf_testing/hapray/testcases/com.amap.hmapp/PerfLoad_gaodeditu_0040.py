@@ -58,12 +58,11 @@ class PerfLoad_gaodeditu_0040(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('高德地图-附近美食、景点页上下滑-step1美食页滑动浏览', 50, step1)
-        for i in range(2):
+        for _i in range(2):
             if self.driver.find_component(BY.text('景点')):
                 break
-            else:
-                self.driver.swipe_to_back()
-                time.sleep(2)
+            self.driver.swipe_to_back()
+            time.sleep(2)
         def step2():
             self.driver.touch(BY.text('景点'))
             time.sleep(2)

@@ -333,7 +333,46 @@ uv run python -m scripts.main perf \
 ### 采集后（与模式无关）
 
 - `perf` 或 `gui-agent` 产出报告目录后，**直接读 `<用例>/report/`**（已含 `summary.json`、`more_flame_graph.json`、全部 `trace_*.json`、`redundant_thread_analysis.json`、`ui_animate.json` 等）进入 **阶段4 高负载分析**（见 [analysis/README.md](../analysis/README.md)）。**默认不跑 `update`**。
+- **内存分析（`--memory` 采集时）**：若采集时附加了 `--memory`，`hapray_report.db` 中 `memory_records` 表有数据 → 同时进入 [analysis/memory-analysis.md](../analysis/memory-analysis.md) 做内存分析。内存采集路由详见 [memory-collect.md](memory-collect.md)。
 - **符号恢复（阶段3，按需）**：仅当需要符号级热点或火焰图为 stripped 地址时，执行 `update --so_dir`（见 [gen-perf-report.md](gen-perf-report.md)）。
 - **root-cause（阶段5，独立）**：多信号综合根因走独立 `root-cause` CLI（默认 `--checker comprehensive`）+ Agent 补充深挖，携带 §0 的 `--source-dir`（见 [comprehensive.md](../root-cause/comprehensive.md)）。
+
+---
+
+## 内存采集路由（`--memory` 附加）
+
+> 当用户需要分析**内存泄漏、未释放内存、meminfo 趋势、GC 压力**时，在上述 `perf` 命令中附加 `--memory` 参数。完整路由详见 [`memory-collect.md`](memory-collect.md)。
+
+### 何时附加 `--memory`
+
+| 场景 | 附加 `--memory` |
+|------|----------------|
+| 用户提及「内存泄漏」「内存增长」「内存占用」「memory leak」 | **必须** |
+| 用户提及「GC 频繁」「内存压力」 | **必须** |
+| 用户要求分析 PixelMap/DMA/图片内存 | **必须** |
+| 用户仅关心 CPU 指令数/卡顿 | 不需要 |
+| 用户同时关心 CPU + 内存 | `perf --memory`（联合采集） |
+
+### 附加参数
+
+```bash
+# 联合采集（perf + trace + memory，推荐）
+uv run python -m scripts.main perf --run_testcases "<用例>" --round 1 --memory
+
+# 纯内存采集（无 perf/trace，开销最小）
+uv run python -m scripts.main perf --run_testcases "<用例>" --round 1 --memory --no-trace --no-perf
+
+# 含堆快照
+uv run python -m scripts.main perf --run_testcases "<用例>" --round 1 --memory --snapshot
+```
+
+### 采集后路由
+
+```
+perf --memory 完成
+  ├─ memory_records 有数据 → 进入 analysis/memory-analysis.md
+  ├─ 同时有 perf.db → 同时进入 analysis/high-load-analysis.md
+  └─ memory_records 为空 → 标注「内存采集失败」
+```
 
 ---

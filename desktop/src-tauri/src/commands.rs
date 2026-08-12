@@ -374,18 +374,18 @@ pub async fn load_plugins_command(app: tauri::AppHandle) -> Result<LoadPluginsRe
     })
 }
 
-/// 解析子进程工作目录：若传入的 cwd 非空且为有效目录则使用，否则使用当前目录。
-fn resolve_work_dir(cwd_override: Option<&str>) -> PathBuf {
-    if let Some(s) = cwd_override {
-        let s = s.trim();
-        if !s.is_empty() {
-            let p = PathBuf::from(s);
-            if p.is_dir() {
-                return p.canonicalize().unwrap_or(p);
-            }
-        }
+/// 解析显式工作区（GUI `exec_cwd`）：非空且为有效目录时返回规范化路径。
+fn resolve_explicit_workspace(cwd_override: Option<&str>) -> Option<PathBuf> {
+    let s = cwd_override?.trim();
+    if s.is_empty() {
+        return None;
     }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    let p = PathBuf::from(s);
+    if p.is_dir() {
+        Some(p.canonicalize().unwrap_or(p))
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -479,10 +479,18 @@ pub async fn execute_tool_command(
     );
 
     let plugin_config = get_plugin_config(&app, &payload.plugin_id)?;
-    let work_dir: PathBuf = resolve_work_dir(payload.cwd.as_deref());
+    // 仅当用户配置了有效 exec_cwd 时注入 HAPRAY_WORKSPACE，使 perf 等走 path_utils 工作区落盘
+    //（对齐 ensure-workspace-layout.sh；避免 macOS 硬写 ~/ArkAnalyzer-HapRay）。
+    let workspace = resolve_explicit_workspace(payload.cwd.as_deref());
+    let work_dir: PathBuf = workspace
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let mut cmd_builder = Command::new(&prepared.exe_path);
     for (env_key, env_value) in plugin_config {
         cmd_builder.env(env_key, env_value);
+    }
+    if let Some(ref ws) = workspace {
+        cmd_builder.env("HAPRAY_WORKSPACE", ws);
     }
     #[cfg(windows)]
     cmd_builder.creation_flags(0x08000000); // CREATE_NO_WINDOW，避免点击菜单时闪出命令行窗口

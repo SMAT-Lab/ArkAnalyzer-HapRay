@@ -219,8 +219,8 @@ const GENERAL_CONFIG_ITEMS: GeneralConfigItemDef[] = [
     key: "exec_cwd",
     type: "dir",
     label: "工作目录",
-    help: "工具执行时将以该目录为当前工作目录；留空则使用应用当前目录。",
-    placeholder: "执行工具时子进程的工作目录，留空则使用当前目录",
+    help: "工具执行时的工作区根目录（cwd + HAPRAY_WORKSPACE）。perf/update 报告落到该目录下 reports/；gui-agent 的 --output 亦使用此路径。留空则沿用应用默认目录（macOS 为 ~/ArkAnalyzer-HapRay）。",
+    placeholder: "例如 HapRay 工作区根目录；留空则使用应用当前目录",
     default: "",
   },
   {
