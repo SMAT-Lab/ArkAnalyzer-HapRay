@@ -41,7 +41,8 @@ def _site_packages_and_app_manager() -> tuple[Path, Path]:
 def _git_apply(diff_file: Path, site_packages: Path, *, reverse: bool = False, check: bool = False) -> subprocess.CompletedProcess[str]:
     """Apply patch under site-packages without using the HapRay git worktree as root."""
     # Absolute --directory needs --unsafe-paths; cwd outside repo avoids worktree path remap.
-    cmd = ['git', 'apply', '-p1', '--unsafe-paths', f'--directory={site_packages}']
+    # --ignore-whitespace: diff 可能 CRLF，hypium wheel 源文件 LF，跨平台兼容行尾差异
+    cmd = ['git', 'apply', '-p1', '--unsafe-paths', '--ignore-whitespace', f'--directory={site_packages}']
     if reverse:
         cmd.append('--reverse')
     if check:
