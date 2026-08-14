@@ -94,9 +94,9 @@ plugin_configs {{
     callframe_compress: true
     record_accurately: true
     offline_symbolization: true
-    startup_mode: false
+    startup_mode: {startup_mode}
     malloc_free_matching_interval: 10
-{expand_pids}
+{target_process}
   }}
 }}"""
 
