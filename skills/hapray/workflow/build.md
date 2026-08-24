@@ -135,3 +135,91 @@ Agent 读取 `so_dir` 后，§0 第 2 项（SO 路径）可直接使用该值，
 ## 二进制轨
 
 二进制轨同样支持 `build` action（`perf-testing build ...`），`devecocli` 须由用户全局安装（不随 HapRay Release 包分发）。
+
+## 源码模式手动构建（build action 降级）
+
+> **触发条件**：源码模式下 `hapray.core.build` 内部模块缺失，`scripts.main build` 会打印降级提示并退出。此时 **Agent 按 本章节直接执行 shell 命令** 完成构建全流程，**禁止**因 action 不可用而跳过构建。
+
+### 0. Node 版本兼容性（MUST 先检查）
+
+`devecocli` 的 ESM 依赖要求 **Node ≥ 20**（`string-width` 用了 `v` flag 正则）。但 `path_utils.ensure_harmony_cli_on_path()` 会把 DevEco 自带的 v18 Node 优先放到 PATH 前面，导致 devecocli 崩溃（`SyntaxError: Invalid regular expression flags`）。
+
+```bash
+# 检查 devecocli 实际用的 node 版本
+node --version
+# 若 < 20，找到系统 Node ≥ 20 并临时前置：
+#   macOS:  export PATH=/usr/local/bin:$PATH   (Homebrew node)
+#   Linux:  export PATH=/usr/local/bin:$PATH
+#   Windows: set "PATH=C:\Program Files\nodejs;%PATH%"
+# 验证：devecocli auth status  不再报 SyntaxError
+```
+
+### 1. 发现工具（跨平台，Agent 自己执行）
+
+```bash
+# devecocli（npm 全局安装）
+which devecocli           # macOS/Linux
+where devecocli           # Windows
+
+# hdc（DevEco Studio 自带）
+which hdc                 # macOS/Linux
+where hdc                 # Windows
+# 若不在 PATH，从 DevEco Studio 安装目录找：
+#   macOS:   /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc
+#   Windows: C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe
+```
+
+### 2. 检查登录 + 登录
+
+```bash
+devecocli auth status
+# 未登录时：
+devecocli auth login      # 会打开浏览器 OAuth，Agent 发 stdin '\n' 触发，等待用户完成（≤5 分钟）
+```
+
+### 3. 生成签名（仅首次或签名无效时）
+
+```bash
+# 检查 build-profile.json5 的 signingConfigs 是否有效（storeFile 路径存在且可读）
+# 无效时执行：
+cd "<HarmonyOS源码工程根>"
+devecocli signature generate --force --product default
+# 会自动写入 ~/.ohos/config/ 并更新 build-profile.json5
+```
+
+### 4. 构建
+
+```bash
+cd "<HarmonyOS源码工程根>"
+devecocli build --product default --build-mode debug
+# 指定模块：devecocli build --product default --build-mode debug --modules entry
+```
+
+### 5. 定位产物 + 抽取 .so
+
+```bash
+# 找 signed HAP
+find "<HarmonyOS源码工程根>/entry/build" -name "*-signed.hap" -o -name "*-unsigned.hap"
+# 常见路径：entry/build/default/outputs/default/entry-default-signed.hap
+
+# 抽取 .so（供符号恢复）
+#   macOS/Linux:
+python3 -c "import zipfile,shutil,os; z=zipfile.ZipFile('<hap_path>'); os.makedirs('<so_out>',exist_ok=True); [shutil.copyfileobj(z.open(n), open(os.path.join('<so_out>',os.path.basename(n)),'wb')) for n in z.namelist() if n.endswith('.so')]"
+#   Windows (PowerShell):
+# Expand-Archive <hap_path> -DestinationPath <tmp>; Copy-Item <tmp>\libs\*.so <so_out>
+```
+
+### 6. 安装到设备
+
+```bash
+hdc install "<signed.hap>"
+# 签名不一致时先卸载：
+hdc shell bm uninstall -n <bundleName> && hdc install "<signed.hap>"
+```
+
+### 7. 写 hapray-tool-result.json（供后续阶段读取）
+
+```bash
+# Agent 收集以下字段写入 <PROJECT_ROOT>/hapray-tool-result.json：
+#   outputs.hap_path / outputs.so_dir / outputs.bundle_name / outputs.build_mode
+```

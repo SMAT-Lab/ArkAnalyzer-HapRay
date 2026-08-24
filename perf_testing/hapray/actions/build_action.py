@@ -21,17 +21,23 @@ import sys
 from typing import Optional
 
 from hapray import VERSION
-from hapray.core.build import (
-    HarmonyProject,
-    build_devecocli_args,
-    check_signing_config,
-    extract_so_from_hap,
-    find_devecocli,
-    find_hdc,
-)
 from hapray.core.common.action_return import ActionExecuteReturn
 
 logger = logging.getLogger(__name__)
+
+try:
+    from hapray.core.build import (
+        HarmonyProject,
+        build_devecocli_args,
+        check_signing_config,
+        extract_so_from_hap,
+        find_devecocli,
+        find_hdc,
+    )
+    _HAS_BUILD_MODULE = True
+except ImportError:
+    _HAS_BUILD_MODULE = False
+    HarmonyProject = None  # type: ignore
 
 DEVECO_CLI_NOT_FOUND_HINT = (
     'devecocli not found in PATH. Install it first:\n'
@@ -112,6 +118,22 @@ class BuildAction:
         )
 
         parsed = parser.parse_args(args)
+
+        if not _HAS_BUILD_MODULE:
+            logging.error(
+                'hapray.core.build 模块不可用（源码模式未包含该内部模块）。\n'
+                '请按 skills/hapray/workflow/build.md 的「源码模式手动构建」章节，'
+                '由 Agent 直接执行 shell 命令完成构建。\n'
+                '关键步骤：\n'
+                '  1. 发现工具: which devecocli (macOS/Linux) / where devecocli (Windows)\n'
+                '  2. 检查登录: devecocli auth status\n'
+                '  3. 未登录则: devecocli auth login (stdin 发回车触发浏览器)\n'
+                '  4. 生成签名: devecocli signature generate --force --product default\n'
+                '  5. 构建:      devecocli build --product default --build-mode debug\n'
+                '  6. 定位产物 + 抽取 .so (见 build.md)\n'
+                '  7. 安装:      hdc install <signed.hap>\n'
+            )
+            return (1, '')
 
         action = BuildAction()
         return action.run(
