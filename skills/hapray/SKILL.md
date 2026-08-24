@@ -1,13 +1,14 @@
 ---
 name: hapray
 version: "1.5.9"
-description: |
+  description: |
   Guides OpenHarmony/HarmonyOS HapRay performance analysis in six stages:
   setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
   Memory analysis is a parallel track when --memory is enabled (memory-collect → memory-analysis → memory-deliverable).
   Symbol recovery (update) is triggered when user explicitly requests it or when hotspots are stripped; skipped otherwise.
-  Use when the user mentions HapRay, 鸿蒙性能, perf testing, 高负载分析, 内存分析, symbol recovery, or root-cause.
-  触发词含：鸿蒙性能、高负载分析、内存分析、内存泄漏、memory leak、空刷根因、符号恢复。
+  PR-Impact is a dual-round comparison workflow when user provides a PR/git identifier + test scenario (build→collect→analyze before, apply changes, build→collect→analyze after, compare).
+  Use when the user mentions HapRay, 鸿蒙性能, perf testing, 高负载分析, 内存分析, symbol recovery, root-cause, PR影响, 改动对比, or 性能对比.
+  触发词含：鸿蒙性能、高负载分析、内存分析、内存泄漏、memory leak、空刷根因、符号恢复、PR影响、改动对比、性能对比.
   Hard gates: no shell until path_prompt_done; then Read this SKILL plus the current stage doc before CLI.
 ---
 
@@ -41,6 +42,7 @@ python <SKILL_DIR>/scripts/update_skill.py --skill-dir <SKILL_DIR>
 | 阶段 | 目录 / 文件 | CLI | 产出 |
 |:--:|-------------|-----|------|
 | **0** | 本节 §0 | — | 路径门禁 |
+| **0.5 build（可选）** | `workflow/build.md` | **`build`** | debug HAP + `.so` 符号文件（自动填充 §0 `so_dir`） |
 | **1 setup** | `workflow/setup-binary.md` / `setup-source.md` | build / 下载 | 环境就绪 |
 | **2 collect** | `workflow/perf-collect.md` | `perf` / `prepare` | `reports/<ts>/<用例>/report/` 全套分析器产物 |
 | **3 gen-perf-report（可选）** | `workflow/gen-perf-report.md` | **`update --so_dir`** | **符号恢复**：用户明确要求，或需要符号级热点/火焰图 stripped 时执行；否则**跳过** |
@@ -49,10 +51,12 @@ python <SKILL_DIR>/scripts/update_skill.py --skill-dir <SKILL_DIR>
 | **6 deliver** | `report/analysis-deliverable.md` 或 `report/memory-deliverable.md` | — | `reports/hapray-analysis-*-load-*.md`（高负载）或 `*-memory-*.md`（内存专题），融合根因 |
 
 ```text
-§0 → 1 setup → 2 perf-collect → [3 gen-perf-report 可选符号恢复] → 4 analysis(读 report/) → 5 root-cause(独立·多信号综合) → 6 analysis-deliverable
+§0 → [0.5 build 可选·从源码构建debug HAP] → 1 setup → 2 perf-collect → [3 gen-perf-report 可选符号恢复] → 4 analysis(读 report/) → 5 root-cause(独立·多信号综合) → 6 analysis-deliverable
 ```
 
-> 默认链路跳过阶段 3：`1 → 2 → 4 → 5 → 6`。仅当需要符号级热点（或火焰图 stripped）时才插入阶段 3 `update --so_dir`，完成后回到阶段 4 补符号级分析。
+> 默认链路跳过阶段 0.5 和 3：`1 → 2 → 4 → 5 → 6`。仅当用户有 HarmonyOS 源码工程、需从源码构建 debug 包时插入阶段 0.5 `build`（产出 HAP + `.so`，自动填充 §0 `so_dir`）；仅当需要符号级热点（或火焰图 stripped）时才插入阶段 3 `update --so_dir`。
+>
+> **PR-Impact 变体**：用户提供 PR/Git 标识 + 测试场景时，走 [`workflow/pr-impact-analysis.md`](workflow/pr-impact-analysis.md) 双轮对比：`§0(+Git标识+场景) → A.Git状态管理 → B.改动前轮(build→collect→analyze→root-cause→pre报告) → C.应用PR改动 → D.改动后轮(复用脚本→build→collect→analyze→root-cause→post报告) → E.对比报告 → F.恢复Git状态`。两轮各自完整走 `0.5 build → 2 → [3?] → 4 → 5 → 6`，最终追加 comparison 报告。
 
 ## 全局规范
 
@@ -116,6 +120,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 1. **必读**：本文件 `SKILL.md` 全文  
 2. **按阶段追加**（至少一项）：
+   - **PR-Impact** → [pr-impact-analysis](workflow/pr-impact-analysis.md)（PR/commit 改动前后对比；需额外追加 build + perf-collect + analysis + root-cause + analysis-deliverable）
+   - 0.5 build → [build](workflow/build.md)（从源码构建 debug HAP 时）
    - 1 setup → [setup-binary](workflow/setup-binary.md) 和/或 [setup-source](workflow/setup-source.md) + **`scripts/ensure-workspace-layout.sh`**
    - 2 collect → [perf-collect](workflow/perf-collect.md)（+ [memory-collect](workflow/memory-collect.md) 当 `--memory` 时）
    - 3 gen-perf-report → [gen-perf-report](workflow/gen-perf-report.md)（仅按需符号恢复，未提则跳过）
@@ -132,6 +138,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 **触发**：会跑 `perf`/`prepare`/构建/下载/`hdc`/`root-cause`/（可选）`update` 等 CLI。
 
 **豁免（ReadOnly）**：只读已有报告或解释 Skill，且**确认**零 Shell → 跳过 §0，见 §1。
+
+> **PR-Impact 额外输入**：当场景为 PR-Impact（用户提供 PR/Git 标识 + 测试场景，要求改动前后对比）时，§0 标准两项路径问完后，**追加**两项额外输入（Git 标识 + 测试场景），详见 [`workflow/pr-impact-analysis.md`](workflow/pr-impact-analysis.md)「额外输入」节。
 
 ### 必问模板（第 1 项）
 
@@ -180,6 +188,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 ```text
 用户请求
   ├─ ReadOnly → 跳过 §0；可读 4/5/6 文档解释产物
+  ├─ PR-Impact → §0(+额外输入: Git标识+测试场景) → pr-impact-analysis 工作流（两轮 build→collect→analyze→root-cause→deliver + 对比报告）
+  ├─ 有源码工程需构建 debug → §0 → 0.5 build → 1 setup → 2 perf-collect → [3 符号恢复?按需] → 4 analysis → 5 root-cause? → 6 deliver
   ├─ SIMPLE   → §0 → 4 analysis(读 report/) → 5 root-cause? → 6 deliver
   ├─ Memory   → §0 → 1 → 2(perf --memory) → [3 符号恢复?按需] → 4 analysis(memory + 可选 high-load) → 5 root-cause? → 6 memory-deliverable
   └─ Full     → §0 → 1 → 2 → [3 符号恢复?按需] → 4 analysis → 5 root-cause? → 6 deliver
@@ -188,6 +198,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 场景 | 阶段 Read |
 |------|-----------|
 | ReadOnly | 按需 analysis / root-cause / analysis-deliverable / memory-deliverable |
+| PR-Impact | **pr-impact-analysis** + build + setup-* + perf-collect + analysis + root-cause + analysis-deliverable（两轮完整流水线 + 对比报告；+ gen-perf-report 仅按需符号恢复，两轮策略须一致） |
+| 有源码构建 | build + setup-* + perf-collect + analysis + root-cause? + analysis-deliverable（+ gen-perf-report 仅按需符号恢复） |
 | SIMPLE | analysis + root-cause? + analysis-deliverable（+ gen-perf-report 仅按需符号恢复） |
 | Memory | memory-collect + memory-analysis + root-cause? + memory-deliverable（+ high-load 联合采集时） |
 | Full | setup-* + perf-collect + analysis + root-cause? + analysis-deliverable（+ gen-perf-report 仅按需符号恢复） |
@@ -199,12 +211,26 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 0 | 0 | §0 问路径 |
 | 0.5 | — | Read 主 SKILL + 当前阶段 doc |
 | 0.25 | — | `ensure-workspace-layout.sh <PROJECT_ROOT>` |
+| 0.75 | 0.5 | **（可选）有源码时** `build --project-dir <源码> --build-mode debug` → 产出 HAP + `.so`（自动填充 §0 `so_dir`） |
 | 1 | 1 | 判轨 → setup-binary / setup-source |
 | 2 | 2 | perf-collect（产出 `report/` 全套分析器数据）；`--memory` 时附加内存采集（见 [memory-collect](workflow/memory-collect.md)） |
 | 3 | 3 | **仅按需** gen-perf-report：符号恢复 `update --so_dir`（要符号级热点 / 火焰图 stripped 时）；未提则**跳过** |
 | 4 | 4 | analysis：**读 `report/`** 做 high-load 分析（默认主线，不跑 update）；`--memory` 时并列做 [memory](analysis/memory-analysis.md) 分析 |
 | 5 | 5 | root-cause：独立 `root-cause` CLI（多信号综合）+ Agent 补充深挖（借源码） |
 | 6 | 6 | analysis-deliverable 落盘（融合 CLI 根因 + Agent 补充）；内存专题时用 [memory-deliverable](report/memory-deliverable.md) |
+
+### TL;DR（PR-Impact 双轮对比）
+
+| 步 | 阶段 | 动作 |
+|:--:|:--:|------|
+| 0 | 0 | §0 问路径 + **额外问 Git 标识 + 测试场景** |
+| 0.5 | — | Read 主 SKILL + [pr-impact-analysis](workflow/pr-impact-analysis.md) + build + perf-collect + analysis + root-cause + deliverable |
+| A | — | **Git 状态管理**：保存原始分支/commit/stash → checkout base（改动前） |
+| B1-B7 | Pre | **改动前轮**：build → 编写 PerfLoad_*+prepare → perf → [符号恢复?] → analysis → root-cause → **pre 报告** |
+| C | — | **应用 PR 改动**：cherry-pick / merge / apply patch |
+| D1-D7 | Post | **改动后轮**：build → **复用脚本**+prepare → perf → [符号恢复?(策略一致)] → analysis → root-cause → **post 报告** |
+| E | 6 | **对比报告**（comparison，逐指标对比 + 逐项评估 + 综合结论：优化/劣化/无明显影响/混合） |
+| F | — | **恢复 Git 原始状态**（必须执行） |
 
 ### 状态机
 
@@ -259,6 +285,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 | 阶段 | 文件 | 要点 |
 |:--:|------|------|
+| **PR-Impact** | [pr-impact-analysis.md](workflow/pr-impact-analysis.md) | **PR/commit 改动前后对比**：两轮 build→collect→analyze→root-cause→deliver + 对比报告；Git 状态管理 + 用例脚本复用 |
+| 0.5 | [build.md](workflow/build.md) | **`build`**：deveco-cli 构建 debug HAP + .so 抽取；自动填充 §0 `so_dir` |
 | 1a | [setup-binary.md](workflow/setup-binary.md) | GitCode 直链；§5 自检 |
 | 1b | [setup-source.md](workflow/setup-source.md) | 7 步 + `scripts/validate-env.sh` |
 | 2 | [perf-collect.md](workflow/perf-collect.md) | 预设→perf；禁止默认 gui-agent；**产出 `report/`** |
@@ -272,6 +300,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 - **Quick**：采集 + analysis（至少一个子 Skill，默认 high-load）+ 阶段 6 报告  
 - **Full**：analysis 三项逐一评估 + 阶段 5 多信号综合 root-cause（CLI + Agent 补充深挖）  
+- **PR-Impact**：双轮对比（改动前 + 改动后），各轮完整走 Full 流程，追加 comparison 报告（见 [`workflow/pr-impact-analysis.md`](workflow/pr-impact-analysis.md)）
 - **Memory**：`--memory` 采集后 + analysis（memory 主线 + 可选 high-load）+ 阶段 6 内存专题报告（见 [`report/memory-deliverable.md`](report/memory-deliverable.md)）
 
 ---
@@ -304,6 +333,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 |------|------|
 | 路径门禁 | §0 |
 | 分阶段 Read | 阶段 Read 清单 |
+| **PR 改动前后对比** | **workflow/pr-impact-analysis** |
+| 构建 debug HAP（可选阶段 0.5） | workflow/build |
 | setup | workflow/setup-* |
 | 采集 | workflow/perf-collect |
 | 内存采集（`--memory`） | workflow/memory-collect |
@@ -324,6 +355,8 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 > **内存并行流程**：当 `perf --memory` 采集时，阶段 4 并列执行 [`analysis/memory-analysis.md`](analysis/memory-analysis.md)（读 `hapray_report.db:memory_*`），阶段 6 产出 [`report/memory-deliverable.md`](report/memory-deliverable.md)（`hapray-analysis-*-memory-*.md`）。内存流程与 high-load 共享 §0/1/2/5，仅在阶段 4 和 6 分叉为独立主线。纯内存模式（`--no-trace --no-perf --memory`）时 high-load 不可用，仅走内存主线。
 
+> **PR-Impact 双轮对比流程**：当用户提供 PR/Git 标识 + 测试场景时，走 [`workflow/pr-impact-analysis.md`](workflow/pr-impact-analysis.md) 双轮流水线：① Git 状态保存 → ② 改动前轮（build→collect→analyze→root-cause→pre 报告）→ ③ 应用 PR 改动 → ④ 改动后轮（build→collect→analyze→root-cause→post 报告）→ ⑤ 对比报告（comparison）→ ⑥ 恢复 Git 状态。两轮**必须复用同一 `PerfLoad_*` 脚本**、同一设备、相同采集参数。产出 3 份报告（pre + post + comparison，见 [`report/analysis-deliverable.md`](report/analysis-deliverable.md)）。
+
 ---
 
 ## §9 异常与降级
@@ -339,6 +372,10 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | `--memory` 采集但 `memory_records` 为空 | 标注「内存采集失败（nativehook 未运行）」；检查 hiprofiler_cmd 日志；GC 分析仍可用（若有 perf.db + trace.db） |
 | 纯内存模式（`--no-trace --no-perf`） | high-load 跳过（无 `perf_sample`）；GC 分析跳过（无 `perf.db` + `trace.db`）；仅做 memory 主线分析 |
 | 内存 callchain 符号为 `[unknown]` | 标注「需 symbol-recovery」；按需触发阶段 3 `update --so_dir` 后重分析 |
+| **PR-Impact：cherry-pick/merge 冲突** | **STOP**，提示用户解决冲突后继续；不跳过冲突强行构建 |
+| **PR-Impact：Post 轮 `PerfLoad_*` 失效（UI 改动）** | 标注「PR 改动导致 UI 变化，前后不可严格对比」；降级为两份独立分析（非严格对比） |
+| **PR-Impact：Post 轮构建失败** | 检查是否 PR 引入编译错误；标注「Post 轮构建失败，对比报告仅基于 Pre 数据」 |
+| **PR-Impact：Git 状态恢复失败** | 输出 `original_branch`/`original_commit`，指导用户手动 `git checkout` 恢复 |
 
 ---
 
@@ -350,6 +387,21 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 
 ```bash
 bash <SKILL_DIR>/scripts/ensure-workspace-layout.sh "<PROJECT_ROOT>"
+```
+
+### 阶段 0.5（可选）build —— 从源码构建 debug HAP
+
+```bash
+# 仅当用户有 HarmonyOS 源码工程时执行；产出 HAP + .so（自动填充 §0 so_dir）
+# 源码轨：
+uv run python -m scripts.main build \
+  --project-dir "<HarmonyOS源码工程根>" \
+  --build-mode debug \
+  --product default \
+  [--modules entry] \
+  --result-file <PROJECT_ROOT>/hapray-tool-result.json
+# 二进制轨：用 <RUNTIME_ROOT>/.../perf-testing build ...
+# 读取 hapray-tool-result.json outputs.so_dir 作为 §0 so_dir
 ```
 
 ### 源码轨（1 setup → 2 collect）
@@ -415,10 +467,20 @@ uv run python -m scripts.main root-cause \
   --report-dir <用例>/report \
   --source-dir "<§0_源码>" \
   [--index-dir "<§0_源码>/index"]
-# 仅证据（不调 LLM）：追加 --skip-llm
+
+# ⚠️ 禁止默认使用 --skip-llm！会使 root_cause.md 全部 Pending，阻塞阶段 6。
+# --skip-llm 仅当用户明确要求"仅提取证据"时使用，且使用后必须完成 Agent 闭环（见 comprehensive.md §〇.3）。
+# 默认 Agent 编排模式不需要 LLM API key——CLI 导出任务 JSON，由当前 Agent 完成推断后重跑 CLI。
+
 # 精选信号类别：追加 --categories cpu-hotspot,empty-frame,thread
 # CLI 覆盖不到的源码级深挖由 Agent 补充（见 root-cause/comprehensive.md §〇.2）
 ```
+
+> **Agent 闭环（MUST）**：首次运行后 `root_cause.md` 含 `Pending Agent Inference` 时，**禁止直接写阶段 6 报告**。必须按 [`comprehensive.md`](root-cause/comprehensive.md) §〇.3 完成：
+> 1. Read `root_cause_agent_task.json` + `root_cause_evidence.md`
+> 2. Agent 按 `expected_schema_json` 写 `root_cause_agent_result.json`
+> 3. 重跑 `root-cause` CLI → 产出正式 `root_cause.md`（无 Pending）
+> 4. 验收通过后才能进入阶段 6
 
 ### 二进制轨（采集）
 
@@ -441,6 +503,67 @@ Windows：`.\hapray.exe --help`。
 uv run python -m scripts.main update --report_dir ./reports/<timestamp> [--so_dir "..."]
 ```
 
+### PR-Impact（PR/commit 改动前后对比，详见 [workflow/pr-impact-analysis.md](workflow/pr-impact-analysis.md)）
+
+```bash
+# === 阶段 A：Git 状态管理（在 <HarmonyOS源码工程根> 下） ===
+cd "<HarmonyOS源码工程根>"
+git rev-parse --abbrev-ref HEAD    # 保存 original_branch
+git rev-parse HEAD                 # 保存 original_commit
+git status --short                 # 保存 original_status
+git stash push -m "hapray-pr-impact-temp"  # 若有未提交改动
+# checkout 到 base（改动前）版本
+git checkout <base_commit>         # commit 类型：目标提交的父提交；branch 类型：当前 HEAD 即 base
+
+# === 阶段 B：改动前轮（Pre Round） ===
+cd <REPO_ROOT>/perf_testing
+# B1. 构建 debug HAP + 安装（base 代码）
+uv run python -m scripts.main build \
+  --project-dir "<HarmonyOS源码工程根>" --build-mode debug \
+  --product default --install --uninstall \
+  --result-file <PROJECT_ROOT>/hapray-tool-result.json
+# B2. 编写 PerfLoad_* + prepare 验证（仅首次，按 perf-collect.md 流程）
+uv run python -m scripts.main prepare --run_testcases "PerfLoad_<用例名>"
+# B3. perf 采集 → report/（pre_timestamp）
+uv run python -m scripts.main perf --run_testcases "PerfLoad_<用例名>" --round 1 \
+  --result-file <PROJECT_ROOT>/hapray-tool-result.json
+# B4. [可选] 符号恢复（两轮策略须一致）
+uv run python -m scripts.main update --report_dir <PROJECT_ROOT>/reports/<pre_timestamp> \
+  --so_dir "<§0_SO>" --result-file <PROJECT_ROOT>/hapray-tool-result.json
+# B5-B6. analysis + root-cause（按标准阶段 4/5 流程）
+# B7. 交付 pre 报告 → reports/hapray-analysis-<YYYYMMDD>-<app>-load-pre.md
+
+# === 阶段 C：应用 PR 改动 ===
+cd "<HarmonyOS源码工程根>"
+git cherry-pick <commit_hash>      # commit 类型
+# 或：git merge <branch_name>      # branch 类型
+# 或：git apply <patch_file>       # patch 类型
+git log --oneline -3               # 验证改动已生效
+
+# === 阶段 D：改动后轮（Post Round，复用同一 PerfLoad_* 脚本） ===
+cd <REPO_ROOT>/perf_testing
+# D1. 构建 debug HAP + 安装（PR 改动后代码）
+uv run python -m scripts.main build \
+  --project-dir "<HarmonyOS源码工程根>" --build-mode debug \
+  --product default --install --uninstall \
+  --result-file <PROJECT_ROOT>/hapray-tool-result.json
+# D2. 复用脚本（禁止重写），prepare 确认可行
+uv run python -m scripts.main prepare --run_testcases "PerfLoad_<用例名>"
+# D3. perf 采集 → report/（post_timestamp，禁止覆盖 pre 目录）
+uv run python -m scripts.main perf --run_testcases "PerfLoad_<用例名>" --round 1 \
+  --result-file <PROJECT_ROOT>/hapray-tool-result.json
+# D4-D6. [可选]符号恢复(策略一致) + analysis + root-cause
+# D7. 交付 post 报告 → reports/hapray-analysis-<YYYYMMDD>-<app>-load-post.md
+
+# === 阶段 E：对比报告 → reports/hapray-analysis-<YYYYMMDD>-<app>-load-comparison.md ===
+
+# === 阶段 F：恢复 Git 原始状态（必须执行） ===
+cd "<HarmonyOS源码工程根>"
+git checkout <original_branch>
+git stash pop    # 若阶段 A 执行了 stash
+git rev-parse HEAD    # 验证恢复到 original_commit
+```
+
 ---
 
 ## §11 明确禁止
@@ -454,6 +577,7 @@ uv run python -m scripts.main update --report_dir ./reports/<timestamp> [--so_di
 - 符号恢复确需执行时无故 `--symbol-recovery-no-llm`；伪交付 / 虚构数据  
 - **`perf` 已成功产出 `report/summary.json` 后重复执行 `perf`**（须先检查已有报告是否存在，存在则直接进阶段4，禁止重跑）
 - **脚本步骤不验证操作是否生效（`step_verified` 门禁违反）**：关键 UI 操作（展开播放器、切换页面、弹出面板等）发完指令就继续，不验证目标界面是否真正出现；**必须遵循 `step_verified` 门禁**（见状态机），写一步 → 设备上执行一步 → 输出验证证据 → `step_verified[N]=true` → 才能写下一步；**⛔ 一次性写完全部步骤后再验证，等价于 `path_prompt_done=false` 时执行 Shell**；未生效则立即修正，禁止带缺陷脚本进入 `prepare`
+- **PR-Impact 违规**：① 两轮使用不同的 `PerfLoad_*` 脚本（破坏对比基线）；② 两轮符号恢复策略不一致；③ Post 轮覆盖 Pre 轮报告目录；④ 遗忘 Git 状态恢复（阶段 F）；⑤ 未保存原始 Git 状态就 `git checkout`/`git reset`；⑥ Post 轮重写用例脚本（非 UI 失效原因）
 
 ---
 

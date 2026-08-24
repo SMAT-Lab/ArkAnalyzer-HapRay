@@ -48,7 +48,46 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides eight main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, `hilog` for hilog analysis, and `gui-agent` for AI-powered phone automation.
+The tool provides eight main commands: `perf` for performance testing, `build` for building debug HAP from source via deveco-cli, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, `hilog` for hilog analysis, and `gui-agent` for AI-powered phone automation.
+
+#### Building Debug HAP (`build`)
+```bash
+python -m scripts.main build -p <project_dir> [options]
+```
+Wraps `devecocli build` to compile a HarmonyOS source project into a debug-mode HAP and extract symbolicated `.so` files for HapRay's symbol recovery pipeline.
+
+Options:
+- `-p/--project-dir <path>`: HarmonyOS project root (containing `build-profile.json5`) (required)
+- `--build-mode <mode>`: Build mode (default: `debug`)
+- `--product <name>`: Product name (default: `default`)
+- `--modules <modules...>`: Modules to build (auto-detected if single entry module)
+- `--so-output-dir <path>`: Directory to extract `.so` files (default: `<project_dir>/build/hapray_so_symbols/`)
+- `--no-extract-so`: Skip `.so` extraction
+- `--install`: Install the built HAP to a connected device after build
+- `--device <serial>`: Target device serial for installation (auto-detected if omitted)
+- `--uninstall`: Uninstall existing app before installation
+- `--timeout <seconds>`: Build timeout (default: 1800 = 30 minutes)
+
+Requirements:
+- `devecocli` in PATH: `npm install -g @deveco/deveco-cli@latest`
+- DevEco Studio or Command Line Tools installed
+- Huawei developer account logged in (`devecocli auth login`) — required for debug signature generation
+
+Signing flow: If `build-profile.json5` has no valid signing config (missing/invalid storeFile), the build action automatically calls `devecocli signature generate --force` to generate debug signing materials. This requires a one-time `devecocli auth login` (opens browser for OAuth).
+
+Example:
+```bash
+# Build debug HAP, extract .so symbols, install to device (replacing old version)
+python -m scripts.main build -p ~/my-harmony-app --build-mode debug --install --uninstall
+
+# Build only (no install)
+python -m scripts.main build -p ~/my-harmony-app
+
+# Build specific module
+python -m scripts.main build -p ~/my-harmony-app --modules entry --product default
+```
+
+The `.so` files extracted from the debug HAP contain symbol tables and can be directly used with `update --so_dir` for symbol recovery.
 
 #### Performance Testing (`perf`)
 ```bash

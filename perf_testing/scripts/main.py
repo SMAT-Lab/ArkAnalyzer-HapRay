@@ -22,6 +22,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from hapray import VERSION
+from hapray.actions.build_action import BuildAction
 from hapray.actions.compare_action import CompareAction
 from hapray.actions.gui_agent_action import GuiAgentAction
 from hapray.actions.haptest_action import HapTestAction
@@ -150,6 +151,7 @@ class HapRayCmd:
 
         actions = {
             'perf': PerfAction,
+            'build': BuildAction,
             'static': StaticAction,
             'update': UpdateAction,
             'compare': CompareAction,
@@ -175,7 +177,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis, haptest: strategy-driven UI automation with perf collection, root-cause: LLM-powered root cause analysis)',
+            help='Action to perform (perf: performance testing, build: build debug HAP via deveco-cli, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis, haptest: strategy-driven UI automation with perf collection, root-cause: LLM-powered root cause analysis)',
         )
         # Parse action（使用已去掉 --machine-json 的 argv）
         action_args = []
