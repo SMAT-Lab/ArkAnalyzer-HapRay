@@ -578,6 +578,7 @@ git rev-parse HEAD    # 验证恢复到 original_commit
 - **`perf` 已成功产出 `report/summary.json` 后重复执行 `perf`**（须先检查已有报告是否存在，存在则直接进阶段4，禁止重跑）
 - **脚本步骤不验证操作是否生效（`step_verified` 门禁违反）**：关键 UI 操作（展开播放器、切换页面、弹出面板等）发完指令就继续，不验证目标界面是否真正出现；**必须遵循 `step_verified` 门禁**（见状态机），写一步 → 设备上执行一步 → 输出验证证据 → `step_verified[N]=true` → 才能写下一步；**⛔ 一次性写完全部步骤后再验证，等价于 `path_prompt_done=false` 时执行 Shell**；未生效则立即修正，禁止带缺陷脚本进入 `prepare`
 - **PR-Impact 违规**：① 两轮使用不同的 `PerfLoad_*` 脚本（破坏对比基线）；② 两轮符号恢复策略不一致；③ Post 轮覆盖 Pre 轮报告目录；④ 遗忘 Git 状态恢复（阶段 F）；⑤ 未保存原始 Git 状态就 `git checkout`/`git reset`；⑥ Post 轮重写用例脚本（非 UI 失效原因）
+- **长命令返回后停顿**：`devecocli build` / `perf` / `prepare` / `root-cause` 等长耗时命令成功返回后，**必须立即**在同一轮回复中发出下一步命令（build→install→UI探测 / prepare→perf / perf→analysis）；**禁止**在命令返回后结束当前回复或等待用户催促；仅当命令**失败**时才允许停下报告错误
 
 ---
 

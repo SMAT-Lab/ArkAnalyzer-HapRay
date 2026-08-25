@@ -85,11 +85,13 @@ uv run python -m scripts.main build \
 
 ## 构建后路由
 
+> **执行规范（MUST）**：build 成功后，Agent **必须立即**在同一轮回复中执行产物定位 → .so 抽取 → 安装到设备，**禁止**在 build 返回后停顿等待用户催促。降级模式下步骤 4-7 必须连续完成。
+
 ```text
 build 成功
   ├─ hap_path 已定位 → .so 已抽取
   │   ├─ so_dir 自动填充 §0 so_dir_user → 跳过 §0 第 2 项询问
-  │   └─ 进入阶段 1 setup（如需装设备：用户自行 devecocli run 或 hdc install）
+  │   └─ Agent 立即 hdc install 安装到设备（禁止让用户自行安装）→ 进入阶段 1 setup
   ├─ hap_path 未定位（metadata 缺失）
   │   └─ 标注「构建成功但产物定位失败」，手动查找 build/outputs/
   └─ build 失败
@@ -139,6 +141,13 @@ Agent 读取 `so_dir` 后，§0 第 2 项（SO 路径）可直接使用该值，
 ## 源码模式手动构建（build action 降级）
 
 > **触发条件**：源码模式下 `hapray.core.build` 内部模块缺失，`scripts.main build` 会打印降级提示并退出。此时 **Agent 按 本章节直接执行 shell 命令** 完成构建全流程，**禁止**因 action 不可用而跳过构建。
+>
+> **⚠️ 连续执行门禁（MUST）**：下方步骤 1-7 是一个**原子序列**，Agent **必须在同一轮回复中连续执行完毕**。具体规则：
+> - 步骤 4（`devecocli build`）返回 `BUILD SUCCESSFUL` 后，**必须立即**在同一条消息中发出步骤 5（定位产物）的命令
+> - 步骤 5 定位到 HAP 后，**必须立即**发出步骤 6（安装到设备）的命令
+> - **禁止**在任一步骤返回后停顿、等待用户催促、或结束当前回复
+> - **禁止**将步骤 4-7 拆分到多轮回复中
+> - 仅当某步骤**失败**时才允许停下报告错误
 
 ### 0. Node 版本兼容性（MUST 先检查）
 
