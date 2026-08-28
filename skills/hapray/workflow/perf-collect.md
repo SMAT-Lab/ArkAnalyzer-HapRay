@@ -171,6 +171,30 @@ def _tap_bounds_center(self, bounds_str: str, wait_seconds: float = 2):
 - **二进制轨**：落盘后执行 `sync-testcases-to-runtime.sh`，再 `prepare`/`perf`  
 - 源码轨若同时维护 `<REPO_ROOT>/perf_testing/hapray/testcases/`，以 `<PROJECT_ROOT>/testcases/` 为 Agent **权威副本**，或 `cp` 保持同步
 - 继承 `hapray.core.perf_testcase.PerfTestCase`；实现 `app_package` / `app_name`；`process()` 内用 `execute_performance_step('<本应用场景描述>', <秒数>, step_fn)`。  
+
+**`.json` 配置文件模板（MUST，与 `.py` 同名同目录）**：
+
+```json
+{
+    "description": "<用例描述>",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "PerfLoad_<应用简称>_<编号>.py"
+        ]
+    },
+    "kits": []
+}
+```
+
+> **注意**：`.json` 文件必须包含 `driver.type: "DeviceTest"` 和 `driver.py_file` 字段，否则 xDevice 报 `no driver to execute` 错误。`py_file` 中的文件名须与实际 `.py` 文件名一致。
+
 - **脚本边界（MUST，无预设自写用例）**：  
   - **`process()` 开头须 `start_app()`**：`setup()` 已杀进程并回桌面，首步负责打开目标 app（与预设用例一致）。  
   - **采集中勿中途退应用**：`execute_performance_step` 内禁止 `stop_app`、Home/`swipe_to_home`、会退出应用的 `swipe_to_back`、切其他包。  

@@ -47,6 +47,55 @@
 
 ---
 
+### 国内网络镜像配置（建议先执行，避免依赖安装卡顿）
+
+> **触发条件**：`npm install` / `uv sync` 明显卡顿（2～3 分钟几乎无进度）、超时或连接 `registry.npmjs.org` / `pypi.org` 失败时，**禁止死等裸连**，先按本节配置镜像再重试。配好后再进入下方「详细执行步骤」。
+
+**npm 镜像**（影响第 2、3 步；用 `npm config get registry` 验证当前源）：
+```bash
+# 阿里云/淘宝 npm 镜像（推荐）
+npm config set registry https://registry.npmmirror.com
+# 或临时单次使用（不改全局配置）：
+#   npm install --registry=https://registry.npmmirror.com
+# 华为云镜像（企业内网友好）：
+#   npm config set registry https://mirrors.huaweicloud.com/repository/npm/
+# 腾讯云镜像：
+#   npm config set registry https://mirrors.cloud.tencent.com/npm/
+# 还原官方源：npm config set registry https://registry.npmjs.org/
+```
+
+**uv / pip 镜像**（影响第 1、5 步；用 `uv config get index` 或 `echo $UV_DEFAULT_INDEX` 验证）：
+```bash
+# 清华 PyPI 镜像（推荐）
+# PowerShell:
+$env:UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
+# Bash:
+export UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 或写入项目级配置（<REPO_ROOT>/perf_testing/uv.toml）一劳永逸：
+#   [[index]]
+#   url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+#   default = true
+
+# pip 降级时同样可配（影响第 1 步降级路径）：
+#   pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 华为云 PyPI 镜像：https://mirrors.huaweicloud.com/pypi/simple
+# 腾讯云 PyPI 镜像：https://mirrors.cloud.tencent.com/pypi/simple
+```
+
+**Bun 镜像**（影响第 3 步 static_analyzer 构建；用 `bun config get registry` 验证）：
+```bash
+# Bun 默认走 npm registry，配好上述 npm 镜像即生效；也可单独设：
+# PowerShell:
+$env:BUN_CONFIG_REGISTRY="https://registry.npmmirror.com"
+# Bash:
+export BUN_CONFIG_REGISTRY=https://registry.npmmirror.com
+```
+
+> **注意**：镜像配置仅影响当前 shell 会话（环境变量方式）。新开终端需重新设置，或写入 shell profile / 项目级配置文件持久化。
+
+---
+
 ### 详细执行步骤
 
 #### 第1步：Python 环境（perf_testing）
@@ -56,10 +105,8 @@ cd <REPO_ROOT>/perf_testing
 uv sync
 ```
 
-- 失败时降级：`pip install -r requirements.txt`
-- 国内网络建议先配置 uv 镜像：
-  - PowerShell: `$env:UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"`
-  - Bash: `export UV_DEFAULT_INDEX=https://pypi.tsinghua.edu.cn/simple`
+- 失败时降级：`pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+- **卡顿/超时**：先按上方「国内网络镜像配置」设 `UV_DEFAULT_INDEX`，再重试 `uv sync`
 
 **验证**：
 ```bash
@@ -73,6 +120,8 @@ cd <REPO_ROOT>/web
 npm install
 npm run build
 ```
+
+- **卡顿/超时**：先按上方「国内网络镜像配置」设 npm registry 为 `https://registry.npmmirror.com`，再重试 `npm install`
 
 **构建流程**：
 1. `npm run build` 执行 `vite build` 生成 `web/dist/index.html`
@@ -104,6 +153,8 @@ cd <REPO_ROOT>/tools/static_analyzer
 npm install
 npm run build
 ```
+
+- **卡顿/超时**：先按上方「国内网络镜像配置」设 npm registry（及 `BUN_CONFIG_REGISTRY`）为 `https://registry.npmmirror.com`，再重试 `npm install`
 
 **验证**：
 ```bash
@@ -157,6 +208,8 @@ uv sync
 # 或：uv pip install -e .
 ```
 
+- **卡顿/超时**：先按上方「国内网络镜像配置」设 `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple`，再重试 `uv sync`（与第 1 步同源镜像）
+
 **安装 radare2 + 源码分析插件（建议，非硬门禁；能安则安，安不上可跳过）**：
 
 macOS：
@@ -207,6 +260,8 @@ r2pm list | grep -E "r2dec|r2ghidra"
 
 | 报错信息 | 缺少的构建步骤 | 修复命令 |
 |----------|---------------|----------|
+| `npm install` 卡住/超时/`ETIMEDOUT`/`ECONNRESET` | npm 源慢（第2、3步） | 先配镜像：`npm config set registry https://registry.npmmirror.com` 后重试；见「国内网络镜像配置」 |
+| `uv sync` 卡住/超时/`Failed to fetch` | PyPI 源慢（第1、5步） | 先配：`$env:UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"` 后重试；见「国内网络镜像配置」 |
 | `report_template.html` 或 `hiperf_report_template.html` 或 `web/dist/index.html` 不存在 | 第2步 web 未构建 | `cd web && npm install && npm run build` |
 | `hapray-sa-cmd not found` / `ExeUtils.get_hapray_cmd_path` 失败 | 第3步 static_analyzer 未构建 | `cd tools/static_analyzer && npm install && npm run build` |
 | `trace_streamer not found` / `ExeUtils.get_trace_streamer_path` 失败 | 第4步 trace_streamer 未解压 | 执行 `npm run prebuild` 解压 `third-party/trace_streamer_binary.zip` |

@@ -81,24 +81,34 @@ class CommandBuilder:
         return self._indent_config(perf_config)
 
     def _build_memory_config(self) -> str:
-        """构建并缩进 memory 配置"""
+        """构建并缩进 memory 配置
+
+        进程存在时使用 expand_pids + startup_mode=false（直接 PID 挂钩）；
+        进程不存在时使用 process_name + startup_mode=true（等待进程启动后 preload 注入）。
+        """
+        max_stack_depth = Config.get('memory.max_stack_depth', 100)
+
         try:
             memory_pids = self.process_manager.get_memory_pids()
         except Exception as e:
             Log.error(f'Failed to get memory pids: {e}')
             memory_pids = []
-            return ''
 
-        if not memory_pids:
-            Log.error('No PIDs provided for memory collection')
-            raise ValueError('Memory collection requires process IDs')
+        if memory_pids:
+            target_process = self._build_expand_pids_lines(memory_pids)
+            startup_mode = 'false'
+            Log.info(f'Memory collection: {len(memory_pids)} process(es) - PIDs: {memory_pids}')
+        else:
+            app_package = self.process_manager.app_package
+            target_process = f'    process_name: "{app_package}"'
+            startup_mode = 'true'
+            Log.info(f'Memory collection: process not running, using startup mode for {app_package}')
 
-        expand_pids_lines = self._build_expand_pids_lines(memory_pids)
-        max_stack_depth = Config.get('memory.max_stack_depth', 100)
-
-        Log.info(f'Memory collection: {len(memory_pids)} process(es) - PIDs: {memory_pids}')
-
-        memory_config = MEMORY_PLUGIN_CONFIG.format(max_stack_depth=max_stack_depth, expand_pids=expand_pids_lines)
+        memory_config = MEMORY_PLUGIN_CONFIG.format(
+            max_stack_depth=max_stack_depth,
+            startup_mode=startup_mode,
+            target_process=target_process,
+        )
         return self._indent_config(memory_config)
 
     def _indent_config(self, config: str) -> str:

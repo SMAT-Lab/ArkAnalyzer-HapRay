@@ -27,11 +27,35 @@ reports/hapray-analysis-20260601-saltplayer-load-comparison.md
 
 ## 阶段 6 门禁（MUST，写交付报告前）
 
+> **前置检查（进入阶段 6 前 MUST 逐项验证）**：
+
+```text
+□ 1. root_cause.md 存在？
+     → 否：先执行 root-cause CLI（见 comprehensive.md §〇.1）
+□ 2. root_cause.md 含 "Pending Agent Inference"？
+     → 是：STOP！禁止写阶段 6。按 comprehensive.md §〇.3 完成 Agent 闭环：
+        Read root_cause_agent_task.json + root_cause_evidence.md
+        → Agent 写 root_cause_agent_result.json
+        → 重跑 root-cause CLI
+        → 验收 root_cause.md 无 Pending
+□ 3. root_cause.md 无 Pending？
+     → 是：Read root_cause.md，提取 Top Suspects（文件:行号 + 信号类别 + 置信度 + 修复建议）
+□ 4. Read root_cause_evidence.md？
+     → 提取 CLI 规则引擎的原始证据（CPU 热点源码行号、SO 负载 Top-N、帧统计等）
+     → 作为第三章「HapRay 证据」段的主要数据源（禁止用 summary.json 替代）
+□ 5. Agent 补充深挖已完成？
+     → 对 root_cause.md 中未达源码级的条目，读 §0 源码逐类追查
+□ 6. 阶段 4 high-load 产物已读取？
+     → 优先读 report/ 下预聚合 JSON（so_file_load.json、trace_frameLoads.json 等）
+     → 禁止以 summary.json 作为高负载挖掘主线
+```
+
 | 条件 | 动作 |
 |------|------|
-| 阶段4 high-load 已完成 | 报告主体（步骤指标、符号/帧/线程/IPC 热点）来自 high-load 真实产物，**非** `summary.json` 复述 |
+| 阶段4 high-load 已完成 | 报告主体（步骤指标、符号/帧/线程/IPC 热点）来自 high-load 真实产物（`so_file_load.json`、`trace_frameLoads.json` 等预聚合 JSON + `root_cause_evidence.md`），**非** `summary.json` 复述 |
 | 存在 `root_cause.md` | Read `<用例>/report/root_cause.md`，将 Top Suspects **融合**进第三章（与 Agent 补充深挖统一排序） |
-| `root_cause.md` 含 `Pending Agent Inference` | **禁止**写阶段 6；先按 [`comprehensive.md`](../root-cause/comprehensive.md) §一.3 完成 Agent 闭环 |
+| `root_cause.md` 含 `Pending Agent Inference` | **禁止**写阶段 6；先按 [`comprehensive.md`](../root-cause/comprehensive.md) §〇.3 完成 Agent 闭环 |
+| `root_cause_evidence.md` 存在 | **MUST Read**；提取 CLI 规则引擎证据（CPU 热点 `源码:行`、SO 负载 Top-N、IPC QPS 等）作为第三章「HapRay 证据」段数据源 |
 | Agent 补充深挖已对 CLI 未达源码级的条目做定位 | 各条作为独立根因条目进入第三章三段式 |
 | 用户 §0 跳过源码 / 无可用信号产物 | root-cause 降级（仅证据无行号 / 仅 perf 产物级）；在「未覆盖项」说明 |
 
@@ -51,7 +75,11 @@ reports/hapray-analysis-20260601-saltplayer-load-comparison.md
 reports/hapray-analysis-<YYYYMMDD>-<app>-load-pre.md
 ```
 
-### 双轮测试（优化后复测）
+### 双轮测试（优化后复测 / PR-Impact 对比）
+
+**触发条件**（满足其一）：
+- 用户要求「优化后复测」「改完再测一次」（标准双轮）
+- 用户提供 PR/Git 标识 + 测试场景，要求改动前后对比（PR-Impact，见 [`workflow/pr-impact-analysis.md`](../workflow/pr-impact-analysis.md)）
 
 产出 **3 份**报告：
 
@@ -62,6 +90,8 @@ reports/hapray-analysis-<YYYYMMDD>-<app>-load-pre.md
 | 修改前后对比报告 | `comparison` | 逐指标对比 + 逐项优化效果评估 + 综合结论 |
 
 **禁止**用 1 份对比报告替代 3 份独立报告。每份报告必须能独立阅读，包含完整上下文。
+
+> **PR-Impact 对比报告额外要求**：comparison 报告须在 §一 概述中包含 PR 标识、改动文件列表（`git diff --name-only`）、改动统计（`git diff --stat`），以及综合结论判定（优化 / 劣化 / 无明显影响 / 混合），见 [`workflow/pr-impact-analysis.md`](../workflow/pr-impact-analysis.md) 阶段 E。
 
 ---
 
@@ -256,11 +286,19 @@ post 报告在 pre 报告基础上增加以下内容：
 **修改前数据：** reports/<pre_timestamp>/<用例名>  
 **修改后数据：** reports/<post_timestamp>/<用例名>
 
+<!-- PR-Impact 时追加以下字段 -->
+**PR/Commit 标识：** <PR URL / commit hash / branch / patch>  
+**改动文件列表：** <git diff --name-only 结果，或摘要>  
+**改动统计：** <git diff --stat 结果，如 "5 files changed, 120 insertions(+), 45 deletions(-)">  
+
 ---
 
 ## 一、概述
 
 本报告对<应用名>代码优化前后的 HapRay 性能测试数据进行全面对比。优化涉及 <N> 项代码修改，覆盖<优化范围一句话>。
+
+<!-- PR-Impact 时替换为： -->
+本报告对<应用名>在 PR <标识> 改动前后的 HapRay 性能测试数据进行全面对比。该 PR 涉及 <N> 个文件改动（<插入> 行新增，<删除> 行删除），覆盖<改动范围一句话>。
 
 **优化项汇总：**
 
@@ -270,6 +308,9 @@ post 报告在 pre 报告基础上增加以下内容：
 | ... | ... | ... | ... | ... |
 
 **结论：** <1-2 句总结优化总体效果>
+
+<!-- PR-Impact 时追加综合判定： -->
+**综合判定：<优化 / 劣化 / 无明显影响 / 混合>** — <一句话解释判定依据>
 
 ---
 
@@ -413,8 +454,9 @@ post 报告在 pre 报告基础上增加以下内容：
 **内容要求（MUST）**：
 
 1. **CLI 根因**：**Read** 磁盘上的 `root_cause.md`（禁止凭记忆缩写），将 Top Suspects 按置信度映射：HIGH→P0、MED→P1、LOW→P2/P3；每条「HapRay 证据」引用其具体数据（空刷帧数、CPU热点指令数、IPC QPS、组件复用率等）；Caveats → 融入「未覆盖项」。
-2. **Agent 补充深挖**：对 CLI 报告中未达源码级定位的条目（无 `文件:行号` 引用），Agent 借 §0 源码逐类追查后作为**独立根因条目**进入第三章三段式，与 CLI 结论一起按优先级排序。阶段4 high-load 挖出但 CLI 未覆盖的线索也应补充。
-3. CLI 与 Agent 补充**去重合并**：若某 CLI suspect 与某 Agent 追查结论指向同一源码点，合并为一条，证据取两侧并集。
+2. **CLI 原始证据**：**Read** `root_cause_evidence.md`（同目录），提取规则引擎的完整证据作为第三章「HapRay 证据」段的**主要数据源**——特别是 CPU 热点的 `源码:行` + 指令数 + 占比、SO 负载 Top-N、帧统计、IPC QPS 等。**禁止**用 `summary.json` 字段复述替代。
+3. **Agent 补充深挖**：对 CLI 报告中未达源码级定位的条目（无 `文件:行号` 引用），Agent 借 §0 源码逐类追查后作为**独立根因条目**进入第三章三段式，与 CLI 结论一起按优先级排序。阶段4 high-load 挖出但 CLI 未覆盖的线索也应补充。
+4. CLI 与 Agent 补充**去重合并**：若某 CLI suspect 与某 Agent 追查结论指向同一源码点，合并为一条，证据取两侧并集。
 
 **禁止**：
 
@@ -442,6 +484,15 @@ post 报告在 pre 报告基础上增加以下内容：
 | `prepare_passed` | `true` / `false` |
 | `root_cause_ready` | `true`：正式 `root_cause.md` 且无 Pending；阶段 6 前置条件 |
 | `report_suffix` | `pre` / `post` / `comparison`；决定报告类型与结构 |
+| `pr_impact_mode` | `true`：当前处于 PR-Impact 双轮对比工作流（见 [`workflow/pr-impact-analysis.md`](../workflow/pr-impact-analysis.md)） |
+| `pr_ref_type` | `url` / `commit` / `branch` / `patch`（PR-Impact 时） |
+| `pr_ref_value` | 用户提供的 Git 标识值（PR-Impact 时） |
+| `test_scenario` | 用户描述的测试场景（PR-Impact 时） |
+| `original_branch` | 阶段 A 保存的原始分支名（PR-Impact 时，用于阶段 F 恢复） |
+| `original_commit` | 阶段 A 保存的原始 commit hash（PR-Impact 时） |
+| `pre_timestamp` | Pre 轮的 reports 时间戳目录（PR-Impact 时） |
+| `post_timestamp` | Post 轮的 reports 时间戳目录（PR-Impact 时） |
+| `current_round` | `pre` / `post`：当前正在执行的轮次（PR-Impact 时） |
 
 ---
 
@@ -471,5 +522,8 @@ post 报告在 pre 报告基础上增加以下内容：
 - [ ] 双轮测试产出 3 份独立报告（pre / post / comparison），每份可独立阅读
 - [ ] post 报告的 §三 每条根因包含优化效果评估（✅/⚠️/❌）
 - [ ] comparison 报告的 §五 逐项评估表与 pre 报告 §八 优先级排序一一对应  
+- [ ] **PR-Impact 时**：comparison 报告 §一 含 PR 标识、改动文件列表、改动统计、综合判定（优化/劣化/无明显影响/混合）
+- [ ] **PR-Impact 时**：两轮数据路径（pre_timestamp / post_timestamp）指向不同目录，未覆盖
+- [ ] **PR-Impact 时**：两轮使用同一 `PerfLoad_*` 脚本（在报告中注明脚本路径一致）
 
 ---

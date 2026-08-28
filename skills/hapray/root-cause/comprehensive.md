@@ -21,15 +21,23 @@
 
 ### 〇.1 CLI 自动分析（默认，覆盖全部信号）
 
+> **⚠️ 关于 `--skip-llm`：禁止默认使用**
+>
+> `--skip-llm` 会使 `root_cause.md` 全部信号标记为 `Pending Agent Inference`（空壳报告），导致阶段 6 门禁阻塞。**仅当用户明确要求"仅提取证据不做推断"时才使用**，且使用后**必须**按 §〇.3 完成 Agent 闭环并重跑 CLI。
+>
+> **Agent 编排模式（默认）不需要 LLM API key**。它的工作方式是：CLI 导出 `root_cause_agent_task.json` → **当前对话的 Agent**（就是你）读取任务 JSON → 按 schema 写 `root_cause_agent_result.json` → 重跑 CLI 生成正式 `root_cause.md`。全程不调外部 LLM API。
+>
+> 需要外部 LLM API 的"本地直连模式"是**非默认兼容路径**，仅当 `HAPRAY_ROOT_CAUSE_EXECUTION=api` + `LLM_*` 环境变量时启用。
+
 ```bash
 cd perf_testing
-# with_source（推荐，需 §0 源码路径）：LLM/Agent 读源码给行级修复
+# 推荐（默认 Agent 编排模式）：--source-dir 提供 §0 源码路径以启用 with_source 行级根因
 uv run python -m scripts.main root-cause \
   --report-dir <用例>/report \
   --source-dir "<§0_源码>" \
   [--index-dir "<§0_源码>/index"]
 
-# 仅证据（不调 LLM）：root_cause.md 为结构化摘要 + Pending Agent Inference 占位符
+# ⚠️ 仅证据模式（不推荐，使用后必须完成 Agent 闭环，见 §〇.3）
 uv run python -m scripts.main root-cause --report-dir <用例>/report --skip-llm
 
 # 精选信号类别
@@ -42,7 +50,9 @@ uv run python -m scripts.main root-cause --report-dir <用例>/report --checker 
 ```
 
 - `--report-dir` **须指向含 `trace_*.json` / `perf.db` 等分析器产物的目录**（一般为 `<用例>/report`）。
-- 默认 **Agent 编排**（导出 `root_cause_agent_task.json` → Agent 写 `root_cause_agent_result.json` → 重跑）。本地直连 API 需 `HAPRAY_ROOT_CAUSE_EXECUTION=api` + `LLM_*`（兼容路径，非默认）。
+- **默认 Agent 编排模式**（不加 `--skip-llm`）：CLI 提取证据 + 导出 Agent 任务 → Agent 完成推断 → 重跑 CLI 生成正式报告。**不需要 `LLM_*` 环境变量**。
+- **`--skip-llm` 模式**：CLI 仅提取证据，`root_cause.md` 全部为 `Pending Agent Inference` 占位符。使用此模式后**必须**按 §〇.3 完成 Agent 闭环，否则阶段 6 门禁阻塞。
+- **本地直连 API 模式**（非默认）：需 `HAPRAY_ROOT_CAUSE_EXECUTION=api` + `LLM_*` 环境变量，CLI 直接调 LLM API 推断根因。一般不使用。
 - **无需 `update`**：本命令独立运行，仅消费 perf 已产出的 `report/`。
 - **`--checker comprehensive`**（默认）覆盖全部信号；`--checker empty-frame` 为旧版仅空刷模式。
 
@@ -87,6 +97,62 @@ CLI 自动分析受限于 LLM prompt 窗口和证据提取粒度，对以下场�
 2. 对其中**未达源码级定位**（无 `文件:行号` 引用）的 suspect 条目，逐条到 §0 源码中追查
 3. 对阶段4 high-load 挖出但 CLI 未覆盖的线索（如动静交叉发现），补充源码级定位
 4. 补充结果直接写入阶段6交付报告的第三章，与 CLI 结论统一排序
+
+### 〇.3 Agent 闭环（MUST，`root_cause.md` 含 Pending 时执行）
+
+> **触发条件**：`root_cause.md` 中任一信号类别含 `Pending Agent Inference`（包括默认 Agent 编排模式首次运行后、或 `--skip-llm` 模式后）。
+>
+> **禁止跳过**：在 `root_cause.md` 含 Pending 时直接写阶段 6 交付报告，违反 `analysis-deliverable.md` 阶段 6 门禁。
+
+#### 闭环步骤（严格执行）
+
+**步骤 1：首次运行 root-cause CLI**
+
+```bash
+cd perf_testing
+uv run python -m scripts.main root-cause \
+  --report-dir <用例>/report \
+  --source-dir "<§0_源码>" \
+  [--index-dir "<§0_源码>/index"]
+```
+
+首次运行后，CLI 产出：
+- `root_cause.md` — 全部信号标记为 `Pending Agent Inference`
+- `root_cause_evidence.md` — 规则引擎提取的完整证据（含 CPU 热点源码行号、SO 负载、帧统计等）
+- `root_cause_agent_task.json` — Agent 任务（含 suspect 列表 + `expected_schema_json`）
+
+**步骤 2：Agent 读取任务 JSON 并完成推断**
+
+Read `root_cause_agent_task.json`，对每个 suspect 条目：
+1. Read `root_cause_evidence.md` 中对应的证据段（CPU 热点源码行号、空刷帧数据、IPC QPS 等）
+2. 结合 §0 源码（`.ts`/`.ets`）追查调用链，定位具体 `文件:行号`
+3. 给出根因类别、置信度（HIGH/MED/LOW）、修复建议
+
+**步骤 3：Agent 写入结果 JSON**
+
+按 `root_cause_agent_task.json` 中的 `expected_schema_json` 格式，将推断结果写入 `root_cause_agent_result.json`（与 task JSON 同目录）。
+
+**步骤 4：重跑 root-cause CLI**
+
+```bash
+cd perf_testing
+uv run python -m scripts.main root-cause \
+  --report-dir <用例>/report \
+  --source-dir "<§0_源码>" \
+  [--index-dir "<§0_源码>/index"]
+```
+
+重跑后 CLI 读取 `root_cause_agent_result.json`，产出**正式 `root_cause.md`**（无 Pending，含 Top Suspects + 置信度 + 源码行号 + 修复建议）。
+
+**步骤 5：验收**
+
+| 检查项 | 通过条件 |
+|--------|----------|
+| `root_cause.md` | 不含 `Pending Agent Inference` |
+| `root_cause.md` Top Suspects | 每条含 `文件:行号` + 信号类别 + 修复建议 |
+| 阶段 6 门禁 | 通过 → 可写交付报告 |
+
+> **关于 `root_cause_evidence.md`**：该文件包含 CLI 规则引擎提取的全部原始证据（CPU 热点源码行号、SO 负载 Top-10、帧统计、IPC QPS 等），是 Agent 做推断的**主要数据来源**。Agent 在步骤 2 中应优先读取此文件获取证据，而非自行从 `summary.json` 重新聚合。
 
 ---
 
