@@ -297,6 +297,85 @@ def _result_file_beside_report_ref(action: str, rpath: str) -> str | None:
     return os.path.join(ap, DEFAULT_RESULT_BASENAME)
 
 
+def _parse_build_result_path(sub_args: list[str]) -> str | None:
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument('-p', '--project-dir', required=False)
+    try:
+        ns, _ = p.parse_known_args(sub_args)
+    except SystemExit:
+        return None
+    if not ns.project_dir:
+        return None
+    return os.path.join(os.path.abspath(ns.project_dir), DEFAULT_RESULT_BASENAME)
+
+
+def _enrich_build_outputs(sub_args: list[str], outputs: dict[str, Any]) -> None:
+    """从 --project-dir 推断构建产物路径，补充到 build action 的 outputs。"""
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument('-p', '--project-dir', required=False)
+    p.add_argument('--so-output-dir', default=None)
+    p.add_argument('--build-mode', default='debug')
+    p.add_argument('--product', default='default')
+    p.add_argument('--modules', nargs='*', default=None)
+    p.add_argument('--no-extract-so', action='store_true')
+    p.add_argument('--install', action='store_true')
+    p.add_argument('--device', default=None)
+    p.add_argument('--uninstall', action='store_true')
+    try:
+        ns, _ = p.parse_known_args(sub_args)
+    except SystemExit:
+        return
+
+    project_dir = os.path.abspath(ns.project_dir) if ns.project_dir else ''
+    if not project_dir:
+        return
+
+    outputs['project_dir'] = project_dir
+    outputs['build_mode'] = ns.build_mode
+    outputs['product'] = ns.product
+
+    if ns.so_output_dir:
+        outputs['so_dir'] = os.path.abspath(ns.so_output_dir)
+    else:
+        default_so = os.path.join(project_dir, 'build', 'hapray_so_symbols')
+        if os.path.isdir(default_so):
+            outputs['so_dir'] = default_so
+
+    if ns.modules:
+        outputs['modules'] = ns.modules
+
+    hap_path = _locate_build_artifact(project_dir, ns.product, ns.modules)
+    if hap_path:
+        outputs['hap_path'] = hap_path
+
+    bundle_name = _read_bundle_name(project_dir)
+    if bundle_name:
+        outputs['bundle_name'] = bundle_name
+
+
+def _locate_build_artifact(
+    project_dir: str, product: str, modules: list[str] | None
+) -> str | None:
+    """从构建产物目录中定位 HAP/HSP 文件。"""
+    try:
+        from hapray.core.build import HarmonyProject
+        project = HarmonyProject.discover(project_dir)
+        mods = project.determine_modules_to_build(modules)
+        first_module = mods[0]
+        return project.find_artifact_path(first_module, product, 'default')
+    except Exception:
+        return None
+
+
+def _read_bundle_name(project_dir: str) -> str | None:
+    try:
+        from hapray.core.build import HarmonyProject
+        project = HarmonyProject.discover(project_dir)
+        return project.get_bundle_name()
+    except Exception:
+        return None
+
+
 def resolve_perf_testing_result_path(
     action: str,
     ret: ActionExecuteReturn,
@@ -317,6 +396,8 @@ def resolve_perf_testing_result_path(
         return _parse_compare_result_path(sub_args)
     if action == 'update':
         return _parse_update_result_path(sub_args)
+    if action == 'build':
+        return _parse_build_result_path(sub_args)
     return None
 
 
@@ -335,6 +416,8 @@ def finish_perf_testing_contract(
     success, exit_code, outputs, err = interpret_perf_testing_return(action, ret)
     if action == 'gui-agent' and outputs.get('reports_path'):
         outputs.update(enrich_gui_agent_contract_outputs(outputs['reports_path']))
+    if action == 'build':
+        _enrich_build_outputs(sub_args, outputs)
     payload = build_tool_result(
         'perf_testing',
         success=success,
