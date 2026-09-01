@@ -106,6 +106,223 @@ export async function queryMemoryMeminfo(db: Database, stepId: number): Promise<
 }
 
 /**
+ * Query meminfo data of all steps (for summary page)
+ * @param db - Database instance
+ * @returns Memory meminfo data array with step_id
+ */
+export async function queryMemoryMeminfoAll(db: Database): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryMemoryMeminfoAll();
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query net native memory timeline aggregated by step and time bucket (for summary page)
+ * @param db - Database instance
+ * @returns Aggregated rows containing step_id, timePoint10ms, netSize, eventCount
+ */
+export async function queryNetMemoryTimelineAll(db: Database): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryNetMemoryTimelineAll();
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query overview level timeline data of all steps (for summary page)
+ * @param db - Database instance
+ * @param groupBy - Group by field: 'category' or 'process'
+ * @returns Aggregated rows containing step_id, timePoint10ms, groupName, netSize
+ */
+export async function queryOverviewTimelineAll(
+  db: Database,
+  groupBy: 'category' | 'process' = 'category'
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryOverviewTimelineAll(groupBy);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query category level records of all steps (for summary page)
+ * @param db - Database instance
+ * @param categoryName - Category name
+ * @returns Aggregated rows containing step_id, timePoint10ms, subCategoryName, netSize
+ */
+export async function queryCategoryRecordsAll(db: Database, categoryName: string): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryCategoryRecordsAll(categoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query subcategory level records of all steps (for summary page)
+ * @param db - Database instance
+ * @param categoryName - Category name
+ * @param subCategoryName - Subcategory name
+ * @returns Aggregated rows containing step_id, timePoint10ms, file, netSize
+ */
+export async function querySubCategoryRecordsAll(
+  db: Database,
+  categoryName: string,
+  subCategoryName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQuerySubCategoryRecordsAll(categoryName, subCategoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query file level event type records of all steps, category mode (for summary page)
+ * @param db - Database instance
+ * @param categoryName - Category name
+ * @param subCategoryName - Subcategory name
+ * @param fileName - File name
+ * @returns Aggregated rows containing step_id, timePoint10ms, eventType, subEventType, netSize
+ */
+export async function queryFileEventTypeRecordsAll(
+  db: Database,
+  categoryName: string,
+  subCategoryName: string,
+  fileName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryFileEventTypeRecordsAll(categoryName, subCategoryName, fileName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query process level records of all steps (for summary page)
+ * @param db - Database instance
+ * @param processName - Process name
+ * @returns Aggregated rows containing step_id, timePoint10ms, thread, netSize
+ */
+export async function queryProcessRecordsAll(db: Database, processName: string): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryProcessRecordsAll(processName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query thread level records of all steps (for summary page)
+ * @param db - Database instance
+ * @param processName - Process name
+ * @param threadName - Thread name
+ * @returns Aggregated rows containing step_id, timePoint10ms, file, netSize
+ */
+export async function queryThreadRecordsAll(
+  db: Database,
+  processName: string,
+  threadName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryThreadRecordsAll(processName, threadName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query file level event type records of all steps, process mode (for summary page)
+ * @param db - Database instance
+ * @param processName - Process name
+ * @param threadName - Thread name
+ * @param fileName - File name
+ * @returns Aggregated rows containing step_id, timePoint10ms, eventType, subEventType, netSize
+ */
+export async function queryFileEventTypeRecordsForProcessAll(
+  db: Database,
+  processName: string,
+  threadName: string,
+  fileName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryFileEventTypeRecordsForProcessAll(processName, threadName, fileName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query native memory distribution by category across all steps (for summary pie chart)
+ * @param db - Database instance
+ * @param selectedStepId - Optional selected step id (records of previous steps are fully included)
+ * @param innerRelativeTs - Optional upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+ * @returns Rows containing categoryName, netSize, eventCount
+ */
+export async function queryCategoryDistributionAll(
+  db: Database,
+  selectedStepId?: number,
+  innerRelativeTs?: number
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryCategoryDistributionAll(selectedStepId, innerRelativeTs);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query native memory distribution by subcategory (.so files) within a category across all steps
+ * (for summary pie chart drill-down)
+ * @param db - Database instance
+ * @param categoryName - Category name
+ * @param selectedStepId - Optional selected step id (records of previous steps are fully included)
+ * @param innerRelativeTs - Optional upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+ * @returns Rows containing subCategoryName, netSize, eventCount
+ */
+export async function querySubCategoryDistributionAll(
+  db: Database,
+  categoryName: string,
+  selectedStepId?: number,
+  innerRelativeTs?: number
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQuerySubCategoryDistributionAll(categoryName, selectedStepId, innerRelativeTs);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query records up to a cumulative time point across all steps, with category filters
+ * (for summary page flame graph)
+ * @param db - Database instance
+ * @param selectedStepId - Selected step id (records of previous steps are fully included)
+ * @param innerRelativeTs - Upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+ * @param categoryName - Optional category filter
+ * @param subCategoryName - Optional sub-category filter
+ * @param fileName - Optional file name filter (supports LIKE pattern matching)
+ * @returns Matching records ordered by step_id, relativeTs
+ */
+export async function queryRecordsUpToTimeByCategoryAll(
+  db: Database,
+  selectedStepId: number,
+  innerRelativeTs: number,
+  categoryName?: string,
+  subCategoryName?: string,
+  fileName?: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToByCategoryAll(
+    selectedStepId,
+    innerRelativeTs,
+    categoryName,
+    subCategoryName,
+    fileName
+  );
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query records up to a cumulative time point across all steps, with process/thread filters
+ * (for summary page flame graph)
+ * @param db - Database instance
+ * @param selectedStepId - Selected step id (records of previous steps are fully included)
+ * @param innerRelativeTs - Upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+ * @param processName - Optional process name filter
+ * @param threadName - Optional thread name filter
+ * @param fileName - Optional file name filter (supports LIKE pattern matching)
+ * @returns Matching records ordered by step_id, relativeTs
+ */
+export async function queryRecordsUpToTimeByProcessAll(
+  db: Database,
+  selectedStepId: number,
+  innerRelativeTs: number,
+  processName?: string,
+  threadName?: string,
+  fileName?: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToByProcessAll(
+    selectedStepId,
+    innerRelativeTs,
+    processName,
+    threadName,
+    fileName
+  );
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
  * Query overview level timeline data (aggregated by time point and category/process)
  * @param db - Database instance
  * @param stepId - Step id

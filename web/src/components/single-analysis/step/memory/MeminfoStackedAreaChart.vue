@@ -10,8 +10,11 @@ import type { ECharts } from 'echarts';
 const props = withDefaults(defineProps<{
   data: Record<string, unknown>[];
   height?: string;
+  /** 每行数据所属的步骤 ID（与 data 一一对应，用于区分步骤区段；不传则不标注） */
+  stepIds?: number[];
 }>(), {
-  height: '500px'
+  height: '500px',
+  stepIds: () => [],
 });
 
 const chartRef = ref<HTMLElement>();
@@ -32,12 +35,26 @@ onUnmounted(() => {
   }
 });
 
-watch(() => props.data, () => {
+watch(() => [props.data, props.stepIds], () => {
   renderChart();
 }, { deep: true });
 
 function handleResize() {
   chartInstance?.resize();
+}
+
+/** 将连续的同步骤行合并为区段（返回 [起始索引, 结束索引, stepId] 列表） */
+function buildStepSpans(stepIds: number[]): Array<{ stepId: number; startIdx: number; endIdx: number }> {
+  const spans: Array<{ stepId: number; startIdx: number; endIdx: number }> = [];
+  stepIds.forEach((stepId, idx) => {
+    const last = spans[spans.length - 1];
+    if (last && last.stepId === stepId) {
+      last.endIdx = idx;
+    } else {
+      spans.push({ stepId, startIdx: idx, endIdx: idx });
+    }
+  });
+  return spans;
 }
 
 function renderChart() {
@@ -63,7 +80,7 @@ function renderChart() {
 
   // 为每个key构建完整的数据数组
   const dataMap = new Map<string, number[]>();
-  
+
   allKeys.forEach(key => {
     const values: number[] = [];
     rowDataList.forEach(rowData => {
@@ -94,12 +111,12 @@ function renderChart() {
     }
     return ts as number;
   });
-  
+
   const baseTimestamp = parsedTimestamps[0];
   const relativeTime = parsedTimestamps.map(ts => (ts - baseTimestamp) / 1000);
 
   // 构建series
-  const series = Array.from(sortedDataMap.entries()).map(([name, data]) => ({
+  const series: Array<Record<string, unknown>> = Array.from(sortedDataMap.entries()).map(([name, data]) => ({
     name,
     type: 'line',
     stack: 'Total',
@@ -109,6 +126,25 @@ function renderChart() {
     },
     data
   }));
+
+  // 步骤区段标注（汇总模式下区分每个步骤的数据点）
+  const hasSteps = props.stepIds.length === props.data.length && props.stepIds.length > 0;
+  let markAreaData: Array<Array<Record<string, unknown>>> | undefined;
+  if (hasSteps) {
+    const spans = buildStepSpans(props.stepIds);
+    markAreaData = spans.map((span, index) => [
+      {
+        name: `步骤${span.stepId}`,
+        xAxis: span.startIdx,
+        itemStyle: {
+          color: index % 2 === 0 ? 'rgba(103, 149, 255, 0.06)' : 'rgba(103, 149, 255, 0.12)',
+        },
+        label: { position: 'insideTop', color: '#73767a', fontSize: 11 },
+      },
+      { xAxis: span.endIdx },
+    ]);
+    series[0].markArea = { silent: true, data: markAreaData };
+  }
 
   const option = {
     title: {
@@ -125,9 +161,15 @@ function renderChart() {
       },
       formatter: (params: unknown) => {
         const paramArray = Array.isArray(params) ? params : [params];
-        let result = `相对时间: ${paramArray[0]?.axisValue}s<br/>`;
+        const first = paramArray[0] as { dataIndex?: number; axisValue?: number } | undefined;
+        if (!first || first.dataIndex == null) return '';
+        let result = `相对时间: ${first.axisValue}s<br/>`;
+        if (hasSteps) {
+          result += `所属步骤: 步骤${props.stepIds[first.dataIndex]}<br/>`;
+        }
         let total = 0;
         paramArray.forEach((item: { marker?: string; seriesName?: string; value?: number }) => {
+          if (item.value == null) return;
           result += `${item.marker}${item.seriesName}: ${item.value?.toFixed(2)} MB<br/>`;
           total += item.value || 0;
         });
@@ -174,4 +216,5 @@ function renderChart() {
   width: 100%;
 }
 </style>
+
 

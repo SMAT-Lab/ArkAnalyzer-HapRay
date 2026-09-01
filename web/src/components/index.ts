@@ -18,6 +18,11 @@ export { default as TrendChart } from './common/charts/TrendChart.vue';
 // 负载总览
 export { default as PerfLoadOverview } from './single-analysis/overview/PerfLoadOverview.vue';
 
+// 分析总结（含内存汇总）
+export { default as SummaryOverview } from './single-analysis/overview/SummaryOverview.vue';
+export { default as MemorySummary } from './single-analysis/overview/MemorySummary.vue';
+export { default as MemoryCategoryPie } from './single-analysis/overview/MemoryCategoryPie.vue';
+
 // 步骤负载分析
 export { default as PerfStepLoad } from './single-analysis/step/load/PerfStepLoad.vue';
 export { default as PerfLoadAnalysis } from './single-analysis/step/load/PerfLoadAnalysis.vue';

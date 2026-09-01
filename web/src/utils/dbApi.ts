@@ -218,6 +218,176 @@ export class DbApi {
   }
 
   /**
+   * Query memory meminfo data of all steps (for summary page)
+   *
+   * @returns Query result array containing step_id
+   */
+  async queryMemoryMeminfoAll(): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryMeminfoAll', {});
+  }
+
+  /**
+   * Query net native memory timeline aggregated by step and time bucket (for summary page)
+   *
+   * @returns Query result array containing step_id, timePoint10ms, netSize, eventCount
+   */
+  async queryNetMemoryTimelineAll(): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryNetMemoryTimelineAll', {});
+  }
+
+  /**
+   * Query overview level timeline data of all steps (for summary page)
+   *
+   * @param groupBy - Group by field: 'category' or 'process'
+   * @returns Query result array containing step_id, timePoint10ms, groupName, netSize
+   */
+  async queryOverviewTimelineAll(groupBy: 'category' | 'process' = 'category'): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryOverviewTimelineAll', { groupBy });
+  }
+
+  /**
+   * Query category level records of all steps (for summary page)
+   *
+   * @param categoryName - Category name
+   * @returns Query result array containing step_id, timePoint10ms, subCategoryName, netSize
+   */
+  async queryCategoryRecordsAll(categoryName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryCategoryRecordsAll', { categoryName });
+  }
+
+  /**
+   * Query subcategory level records of all steps (for summary page)
+   *
+   * @param categoryName - Category name
+   * @param subCategoryName - Subcategory name
+   * @returns Query result array containing step_id, timePoint10ms, file, netSize
+   */
+  async querySubCategoryRecordsAll(categoryName: string, subCategoryName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.querySubCategoryRecordsAll', {
+      categoryName,
+      subCategoryName,
+    });
+  }
+
+  /**
+   * Query file level event type records of all steps, category mode (for summary page)
+   *
+   * @param categoryName - Category name
+   * @param subCategoryName - Subcategory name
+   * @param fileName - File name
+   * @returns Query result array containing step_id, timePoint10ms, eventType, subEventType, netSize
+   */
+  async queryFileEventTypeRecordsAll(
+    categoryName: string,
+    subCategoryName: string,
+    fileName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryFileEventTypeRecordsAll', {
+      categoryName,
+      subCategoryName,
+      fileName,
+    });
+  }
+
+  /**
+   * Query process level records of all steps (for summary page)
+   *
+   * @param processName - Process name
+   * @returns Query result array containing step_id, timePoint10ms, thread, netSize
+   */
+  async queryProcessRecordsAll(processName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryProcessRecordsAll', { processName });
+  }
+
+  /**
+   * Query thread level records of all steps (for summary page)
+   *
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @returns Query result array containing step_id, timePoint10ms, file, netSize
+   */
+  async queryThreadRecordsAll(processName: string, threadName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryThreadRecordsAll', {
+      processName,
+      threadName,
+    });
+  }
+
+  /**
+   * Query file level event type records of all steps, process mode (for summary page)
+   *
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @param fileName - File name
+   * @returns Query result array containing step_id, timePoint10ms, eventType, subEventType, netSize
+   */
+  async queryFileEventTypeRecordsForProcessAll(
+    processName: string,
+    threadName: string,
+    fileName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryFileEventTypeRecordsForProcessAll', {
+      processName,
+      threadName,
+      fileName,
+    });
+  }
+
+  /**
+   * Query records up to a cumulative time point across all steps, with category filters
+   * (for summary page flame graph)
+   *
+   * @param selectedStepId - Selected step id (records of previous steps are fully included)
+   * @param innerRelativeTs - Upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+   * @param categoryName - Optional category name filter
+   * @param subCategoryName - Optional subcategory name filter
+   * @param fileName - Optional file name filter (supports LIKE pattern matching)
+   * @returns Matching records ordered by step_id, relativeTs
+   */
+  async queryRecordsUpToByCategoryAll(
+    selectedStepId: number,
+    innerRelativeTs: number,
+    categoryName?: string,
+    subCategoryName?: string,
+    fileName?: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryRecordsUpToByCategoryAll', {
+      selectedStepId,
+      innerRelativeTs,
+      categoryName,
+      subCategoryName,
+      fileName,
+    });
+  }
+
+  /**
+   * Query records up to a cumulative time point across all steps, with process/thread filters
+   * (for summary page flame graph)
+   *
+   * @param selectedStepId - Selected step id (records of previous steps are fully included)
+   * @param innerRelativeTs - Upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+   * @param processName - Optional process name filter
+   * @param threadName - Optional thread name filter
+   * @param fileName - Optional file name filter (supports LIKE pattern matching)
+   * @returns Matching records ordered by step_id, relativeTs
+   */
+  async queryRecordsUpToByProcessAll(
+    selectedStepId: number,
+    innerRelativeTs: number,
+    processName?: string,
+    threadName?: string,
+    fileName?: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryRecordsUpToByProcessAll', {
+      selectedStepId,
+      innerRelativeTs,
+      processName,
+      threadName,
+      fileName,
+    });
+  }
+
+  /**
    * Query records up to a specific timestamp (inclusive) with category filters
    * Used for category view mode
    *
@@ -282,6 +452,44 @@ export class DbApi {
     return await this.client.request<SqlRow[]>('memory.queryCallchainFrames', {
       stepId,
       callchainIds,
+    });
+  }
+
+  /**
+   * Query native memory distribution by category across all steps (for summary pie chart)
+   *
+   * @param selectedStepId - Optional selected step id (records of previous steps are fully included)
+   * @param innerRelativeTs - Optional upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+   * @returns Query result array containing categoryName, netSize, eventCount
+   */
+  async queryCategoryDistributionAll(
+    selectedStepId?: number,
+    innerRelativeTs?: number
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryCategoryDistributionAll', {
+      selectedStepId,
+      innerRelativeTs,
+    });
+  }
+
+  /**
+   * Query native memory distribution by subcategory (.so files) within a category across all steps
+   * (for summary pie chart drill-down)
+   *
+   * @param categoryName - Category name
+   * @param selectedStepId - Optional selected step id (records of previous steps are fully included)
+   * @param innerRelativeTs - Optional upper bound (inclusive) of relative timestamp within the selected step (nanoseconds)
+   * @returns Query result array containing subCategoryName, netSize, eventCount
+   */
+  async querySubCategoryDistributionAll(
+    categoryName: string,
+    selectedStepId?: number,
+    innerRelativeTs?: number
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.querySubCategoryDistributionAll', {
+      categoryName,
+      selectedStepId,
+      innerRelativeTs,
     });
   }
 
