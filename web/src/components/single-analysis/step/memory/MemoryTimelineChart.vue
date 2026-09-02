@@ -165,7 +165,16 @@ import {
   fetchThreadRecords,
   fetchFileEventTypeRecords,
   fetchFileEventTypeRecordsForProcess,
+  fetchSummaryStepRanges,
+  fetchSummaryOverviewTimeline,
+  fetchSummaryCategoryRecords,
+  fetchSummarySubCategoryRecords,
+  fetchSummaryProcessRecords,
+  fetchSummaryThreadRecords,
+  fetchSummaryFileEventTypeRecords,
+  fetchSummaryFileEventTypeRecordsForProcess,
 } from '@/stores/nativeMemory';
+import type { SummaryStepRange } from '@/stores/nativeMemory';
 
 // 时间线处理后的数据结构（供图表渲染使用）
 interface TimelineProcessedData {
@@ -259,14 +268,17 @@ const MAX_SERIES_IN_CATEGORY_VIEW = 10;
 const MAX_SERIES_IN_FILE_VIEW = 10;
 
 interface Props {
-  stepId: number; // 步骤 ID，例如 1
+  stepId?: number; // 步骤 ID，例如 1（汇总模式下无需传入）
   height?: string;
   selectedTimePoint?: number | null; // 已选中的时间点
+  summaryMode?: boolean; // 汇总模式：跨步骤累计时间线（所有步骤首尾拼接，累计值跨步骤延续）
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  stepId: undefined,
   height: DEFAULT_CHART_HEIGHT,
   selectedTimePoint: null,
+  summaryMode: false,
 });
 
 // 事件发射器（对外通知时间点选择、统计信息更新、下钻状态变化）
@@ -301,6 +313,9 @@ const emit = defineEmits<{
 const chartContainer = ref<HTMLDivElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 const isLoading = ref(false);
+
+// 汇总模式：所有步骤的时间轴区间（用于步骤区段标注与所属步骤提示）
+const summaryStepRanges = ref<SummaryStepRange[]>([]);
 
 // 当前下钻范围内的记录（按需加载）
 const currentRecords = ref<NativeMemoryRecord[]>([]);
@@ -1041,28 +1056,74 @@ function processTimelineDataSync(): TimelineProcessedData {
 
 /**
  * 根据当前下钻层级加载数据。
+ * 汇总模式（summaryMode）加载所有步骤的跨步骤累计数据；普通模式加载单个步骤的数据。
  */
 async function loadCurrentLevelData() {
   try {
     isLoading.value = true;
-    console.log('[MemoryTimelineChart] Loading data for level:', drillDownLevel.value, 'mode:', viewMode.value);
+    console.log('[MemoryTimelineChart] Loading data for level:', drillDownLevel.value, 'mode:', viewMode.value, 'summary:', props.summaryMode);
+
+    // 汇总模式：使用跨步骤累计的汇总查询
+    if (props.summaryMode) {
+      if (drillDownLevel.value === 'overview') {
+        const groupBy = viewMode.value === 'process' ? 'process' : 'category';
+        currentRecords.value = await fetchSummaryOverviewTimeline(groupBy);
+      } else if (viewMode.value === 'category') {
+        if (drillDownLevel.value === 'category') {
+          currentRecords.value = await fetchSummaryCategoryRecords(selectedCategory.value);
+        } else if (drillDownLevel.value === 'subCategory' || drillDownLevel.value === 'file') {
+          currentRecords.value = await fetchSummarySubCategoryRecords(
+            selectedCategory.value,
+            selectedSubCategory.value
+          );
+        } else if (drillDownLevel.value === 'event') {
+          currentRecords.value = await fetchSummaryFileEventTypeRecords(
+            selectedCategory.value,
+            selectedSubCategory.value,
+            selectedFile.value
+          );
+        }
+      } else {
+        if (drillDownLevel.value === 'process') {
+          currentRecords.value = await fetchSummaryProcessRecords(selectedProcess.value);
+        } else if (drillDownLevel.value === 'thread' || drillDownLevel.value === 'file') {
+          currentRecords.value = await fetchSummaryThreadRecords(
+            selectedProcess.value,
+            selectedThread.value
+          );
+        } else if (drillDownLevel.value === 'event') {
+          currentRecords.value = await fetchSummaryFileEventTypeRecordsForProcess(
+            selectedProcess.value,
+            selectedThread.value,
+            selectedFile.value
+          );
+        }
+      }
+      return;
+    }
+
+    const stepId = props.stepId;
+    if (stepId == null) {
+      currentRecords.value = [];
+      return;
+    }
 
     // 根据下钻级别加载不同的数据
     if (drillDownLevel.value === 'overview') {
       // 总览层级：根据模式加载不同的聚合数据
       const groupBy = viewMode.value === 'process' ? 'process' : 'category';
-      currentRecords.value = await fetchOverviewTimeline(props.stepId, groupBy);
+      currentRecords.value = await fetchOverviewTimeline(stepId, groupBy);
     } else if (viewMode.value === 'category') {
       // 分类模式
       if (drillDownLevel.value === 'category') {
         // 大类层级：加载指定大类的记录
-        currentRecords.value = await fetchCategoryRecords(props.stepId, selectedCategory.value);
+        currentRecords.value = await fetchCategoryRecords(stepId, selectedCategory.value);
       } else if (drillDownLevel.value === 'subCategory' || drillDownLevel.value === 'file') {
         // 小类层级和文件层级：加载指定小类的所有记录
         // 文件层级会在 processTimelineDataSync 中通过前端过滤
         console.log('[MemoryTimelineChart] Loading subCategory/file data for:', selectedCategory.value, selectedSubCategory.value);
         currentRecords.value = await fetchSubCategoryRecords(
-          props.stepId,
+          stepId,
           selectedCategory.value,
           selectedSubCategory.value
         );
@@ -1071,7 +1132,7 @@ async function loadCurrentLevelData() {
         // 事件层级：加载指定文件的事件类型数据
         console.log('[MemoryTimelineChart] Loading event data for:', selectedCategory.value, selectedSubCategory.value, selectedFile.value);
         currentRecords.value = await fetchFileEventTypeRecords(
-          props.stepId,
+          stepId,
           selectedCategory.value,
           selectedSubCategory.value,
           selectedFile.value
@@ -1082,13 +1143,13 @@ async function loadCurrentLevelData() {
       // 进程模式
       if (drillDownLevel.value === 'process') {
         // 进程层级：加载指定进程的记录
-        currentRecords.value = await fetchProcessRecords(props.stepId, selectedProcess.value);
+        currentRecords.value = await fetchProcessRecords(stepId, selectedProcess.value);
       } else if (drillDownLevel.value === 'thread' || drillDownLevel.value === 'file') {
         // 线程层级和文件层级：加载指定线程的所有记录
         // 文件层级会在 processTimelineDataSync 中通过前端过滤
         console.log('[MemoryTimelineChart] Loading thread/file data for:', selectedProcess.value, selectedThread.value);
         currentRecords.value = await fetchThreadRecords(
-          props.stepId,
+          stepId,
           selectedProcess.value,
           selectedThread.value
         );
@@ -1097,7 +1158,7 @@ async function loadCurrentLevelData() {
         // 事件层级：加载指定文件的事件类型数据
         console.log('[MemoryTimelineChart] Loading event data for:', selectedProcess.value, selectedThread.value, selectedFile.value);
         currentRecords.value = await fetchFileEventTypeRecordsForProcess(
-          props.stepId,
+          stepId,
           selectedProcess.value,
           selectedThread.value,
           selectedFile.value
@@ -1202,8 +1263,16 @@ function getSeriesColor(seriesIndex: number, isTotalSeries: boolean): string {
   return isTotalSeries ? HIGHLIGHT_COLORS[0] : SERIES_COLORS[seriesIndex % SERIES_COLORS.length];
 }
 
-function buildTooltipHtml(seriesName: string, seriesIndex: number, cumulativeMemory: number): string {
+function buildTooltipHtml(
+  seriesName: string,
+  seriesIndex: number,
+  cumulativeMemory: number,
+  stepLabel?: string
+): string {
   const color = getHighlightColor(seriesIndex);
+  const stepLine = stepLabel
+    ? `      <div>所属步骤: <span style="color: #909399;">${stepLabel}</span></div>`
+    : '';
   return [
     '<div style="padding: 8px; min-width: 220px;">',
     '  <div style="margin-bottom: 8px;">',
@@ -1213,10 +1282,24 @@ function buildTooltipHtml(seriesName: string, seriesIndex: number, cumulativeMem
     '    </div>',
     '    <div style="margin-left: 16px; font-size: 12px;">',
     `      <div>当前内存: <span style="color: ${color}; font-weight: bold;">${formatBytes(cumulativeMemory)}</span></div>`,
+    stepLine,
     '    </div>',
     '  </div>',
     '</div>',
   ].join('');
+}
+
+/**
+ * 根据跨步骤累计时间轴上的时间点，查找所属步骤（汇总模式使用）
+ */
+function getStepLabelForTime(timeSec: number): string | undefined {
+  if (!props.summaryMode || summaryStepRanges.value.length === 0) {
+    return undefined;
+  }
+  const range =
+    summaryStepRanges.value.find((r) => timeSec >= r.startSec && timeSec < r.endSec) ??
+    summaryStepRanges.value[summaryStepRanges.value.length - 1];
+  return range ? `步骤${range.stepId}` : undefined;
 }
 
 function getSymbolSize(isLargeDataset: boolean, isVeryLargeDataset: boolean): number {
@@ -1373,6 +1456,62 @@ function buildSeriesPoint(
   );
 }
 
+/**
+ * 将跨步骤累计时间轴上的秒数转换为图表数据点索引（category 轴）
+ * 返回第一个 relativeTs >= timeSec 的索引；若超出范围则返回最后一个索引
+ */
+function timeToChartIndex(
+  chartData: TimelineProcessedData['chartData'],
+  timeSec: number
+): number {
+  for (let i = 0; i < chartData.length; i++) {
+    if (chartData[i].relativeTs >= timeSec) {
+      return i;
+    }
+  }
+  return chartData.length - 1;
+}
+
+/**
+ * 构建汇总模式的步骤区段 markArea 数据（背景区块区分每个步骤的数据点）
+ * 附加在一个 silent 的空系列上，避免随系列显隐而丢失
+ */
+function buildSummaryStepMarkArea(
+  chartData: TimelineProcessedData['chartData']
+): echarts.MarkAreaComponentOption | undefined {
+  if (!props.summaryMode || summaryStepRanges.value.length === 0 || chartData.length === 0) {
+    return undefined;
+  }
+
+  const areaData = summaryStepRanges.value
+    .map((range, index): [{ name: string; xAxis: number; itemStyle: { color: string }; label: Record<string, unknown> }, { xAxis: number }] | null => {
+      const startIdx = timeToChartIndex(chartData, range.startSec);
+      const endIdx = timeToChartIndex(chartData, range.endSec);
+      // 该步骤在当前视图下没有数据点时跳过
+      if (endIdx <= startIdx && chartData[startIdx]?.relativeTs >= range.endSec) {
+        return null;
+      }
+      return [
+        {
+          name: `步骤${range.stepId}`,
+          xAxis: startIdx,
+          itemStyle: {
+            color: index % 2 === 0 ? 'rgba(103, 149, 255, 0.06)' : 'rgba(103, 149, 255, 0.12)',
+          },
+          label: { position: 'insideTop', color: '#73767a', fontSize: 11 },
+        },
+        { xAxis: endIdx },
+      ];
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  if (areaData.length === 0) {
+    return undefined;
+  }
+
+  return { silent: true, data: areaData } as unknown as echarts.MarkAreaComponentOption;
+}
+
 function buildSeriesOptions(
   seriesData: TimelineProcessedData['seriesData'],
   params: ChartOptionParams,
@@ -1394,7 +1533,7 @@ function buildSeriesOptions(
     return true;
   });
 
-  return filteredSeriesData.map((series) => {
+  const seriesOptions: LineSeriesOption[] = filteredSeriesData.map((series) => {
     // 计算原始的 seriesIndex（用于颜色和其他配置）
     const originalSeriesIndex = seriesData.indexOf(series);
     const isTotalSeries = drillLevel === 'overview' && originalSeriesIndex === 0;
@@ -1460,6 +1599,21 @@ function buildSeriesOptions(
       z: isTotalSeries ? 10 : 5,
     };
   });
+
+  // 汇总模式：追加 silent 空系列承载步骤区段 markArea（不参与图例与交互）
+  const stepMarkArea = buildSummaryStepMarkArea(params.chartData);
+  if (stepMarkArea) {
+    seriesOptions.push({
+      name: '__summary_step_areas__',
+      type: 'line' as const,
+      data: [],
+      silent: true,
+      markArea: stepMarkArea,
+      z: 1,
+    } as LineSeriesOption);
+  }
+
+  return seriesOptions;
 }
 
 function buildChartTitle(
@@ -1472,7 +1626,7 @@ function buildChartTitle(
   selectedThreadName: string,
   selectedFileName: string,
 ): string {
-  let title = '内存时间线';
+  let title = props.summaryMode ? '全场景 Native 内存时间线（跨步骤累计）' : '内存时间线';
 
   if (drillLevel === 'overview') {
     const groupCount = Math.max(seriesCount - 1, 0);
@@ -1514,7 +1668,11 @@ function buildChartSubtext(
 ): string {
   const hints: string[] = [];
 
-  if (drillLevel === 'overview') {
+  if (props.summaryMode) {
+    // 汇总模式：无火焰图，点击数据点查看跨步骤累计统计信息
+    hints.push('💡 点击线条上的点查看该时间点统计（跨步骤累计）');
+    hints.push('🎨 背景区块区分步骤，时间轴为各步骤首尾拼接的累计时间');
+  } else if (drillLevel === 'overview') {
     if (mode === 'category') {
       hints.push('💡 点击线条上的点查看大类火焰图');
     } else {
@@ -1750,7 +1908,12 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
             return '';
           }
 
-          return buildTooltipHtml(seriesName, seriesIndex, dataItem.cumulativeMemory);
+          return buildTooltipHtml(
+            seriesName,
+            seriesIndex,
+            dataItem.cumulativeMemory,
+            getStepLabelForTime(dataItem.relativeTs)
+          );
         } catch (error) {
           console.error('[MemoryTimelineChart] Tooltip formatter error:', error);
           return '';
@@ -1767,7 +1930,7 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
     xAxis: {
       type: 'category',
       data: chartData.map((_, index) => index),
-      name: '相对时间',
+      name: props.summaryMode ? '累计时间' : '相对时间',
       nameLocation: 'middle',
       nameGap: 30,
       axisLabel: {
@@ -2525,10 +2688,14 @@ function getSeriesScopedRecordsForName(seriesName: string): NativeMemoryRecord[]
   return sortedRecords;
 }
 
-// Reload data when the step id changes
+// Reload data when the step id changes (not applicable in summary mode)
 watch(
   () => props.stepId,
   async () => {
+    if (props.summaryMode || props.stepId == null) {
+      return;
+    }
+
     // Reset drill-down state
     drillDownLevel.value = 'overview';
     selectedCategory.value = '';
@@ -2562,6 +2729,16 @@ const handleResize = () => {
 };
 
 onMounted(async () => {
+  // 汇总模式：先加载步骤时间轴区间（用于步骤区段标注与所属步骤提示）
+  if (props.summaryMode) {
+    try {
+      summaryStepRanges.value = await fetchSummaryStepRanges();
+    } catch (error) {
+      console.warn('[MemoryTimelineChart] Failed to load summary step ranges:', error);
+      summaryStepRanges.value = [];
+    }
+  }
+
   // Load current-level data first
   await loadCurrentLevelData();
 

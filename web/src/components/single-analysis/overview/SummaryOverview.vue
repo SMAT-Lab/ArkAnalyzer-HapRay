@@ -14,7 +14,7 @@
         </el-button>
       </div>
       <p class="summary-desc">
-        汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、冗余线程分析、Image 超尺寸统计以及组件树上/未上树节点情况。
+        汇总各步骤的关键信息，包括内存汇总（跨步骤累计）、组件复用、故障树识别结果、冗余线程分析、Image 超尺寸统计以及组件树上/未上树节点情况。
       </p>
     </div>
 
@@ -121,6 +121,9 @@
       </div>
     </el-card>
 
+    <!-- 内存汇总（跨步骤累计，数据来自报告 DB，无内存数据时自动隐藏） -->
+    <MemorySummary @page-change="goToDetail" />
+
     <!-- 步骤导航 -->
     <div v-if="summaryItems.length" class="step-nav">
       <span class="step-nav-label">步骤导航：</span>
@@ -226,6 +229,7 @@
 import { computed, ref } from 'vue';
 import { Download } from '@element-plus/icons-vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
+import MemorySummary from './MemorySummary.vue';
 
 const emit = defineEmits<{ (e: 'page-change', page: string): void }>();
 
