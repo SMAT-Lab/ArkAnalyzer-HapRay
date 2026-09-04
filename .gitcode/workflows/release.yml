@@ -1,0 +1,153 @@
+name: Release
+
+# GitCode AtomGit Actions：仅 euleros Linux runner，4 目标在单 runner 跨平台编译。
+# 与 .github/workflows/release.yml 的差异：
+#   - 用 ATOMGIT_* 变量（非 github.*），无 GITHUB_ENV/GITHUB_WORKSPACE/GITHUB_PATH
+#   - 步骤间 env 不持久，bun 的 PATH 在每个用到的 step 里各自 export
+#   - 版本回退用 jq（euleros 自带），不依赖 node
+#   - Release 经 GitCode v5 API（PRIVATE-TOKEN）发布
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag（如 v1.0.0）；留空则用 package.json 的 v<version>"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    name: Build sa-cmd (${{ matrix.platform }})
+    runs-on: euleros-2.10.1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # platform key 与 SKILL 仓 tools.toml 一致；target 为 bun 跨平台编译 triple
+          - platform: darwin-arm64
+            target: bun-darwin-arm64
+          - platform: darwin-x86_64
+            target: bun-darwin-x64
+          - platform: linux-x86_64
+            target: bun-linux-x64
+          - platform: windows-x86_64
+            target: bun-windows-x64
+    steps:
+      - name: Checkout
+        uses: checkout-action@0.0.1
+
+      - name: Setup Bun
+        run: |
+          # 官方安装脚本。若 euleros 访问 bun.sh 受限，改为可信镜像，勿用不透明短链。
+          curl -fsSL https://bun.sh/install | bash
+
+      - name: Install dependencies
+        working-directory: repo_workspace
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bun install
+
+      - name: Build binary (cross-compile)
+        working-directory: repo_workspace
+        run: |
+          export PATH="$HOME/.bun/bin:$PATH"
+          bun run build.bun.ts -- --binary --target=${{ matrix.target }}
+
+      - name: Compute version
+        id: ver_calc
+        working-directory: repo_workspace
+        run: |
+          # 优先级：dispatch 输入 > tag push(ATOMGIT_REF) > package.json
+          INPUT_TAG="${{ ATOMGIT_INPUTS_tag_name }}"
+          REF="${{ ATOMGIT_REF }}"
+          if [ -n "$INPUT_TAG" ]; then
+            VERSION="$INPUT_TAG"
+          elif [[ "$REF" == refs/tags/v* ]]; then
+            VERSION="${REF#refs/tags/}"
+          else
+            VERSION="v$(jq -r .version package.json)"
+          fi
+          VER="${VERSION#v}"
+          echo "::set-output name=version::$VERSION"
+          echo "::set-output name=ver::$VER"
+
+      - name: Zip artifact
+        working-directory: repo_workspace
+        run: |
+          ZIP="sa-cmd-${{ matrix.platform }}-${{ steps.ver_calc.outputs.ver }}.zip"
+          # 打包 sa-cmd 内容（不含顶层壳），与 tools.toml to= 解压到 sa-cmd/ 的约定一致
+          # 从 repo_workspace/dist/tools/sa-cmd 上溯 3 级回到 repo_workspace 根
+          cd dist/tools/sa-cmd && zip -rX "../../../$ZIP" .
+
+      - name: Upload artifact
+        uses: upload-artifact-action@0.0.1
+        with:
+          name: sa-cmd-${{ matrix.platform }}
+          path: sa-cmd-${{ matrix.platform }}-${{ steps.ver_calc.outputs.ver }}.zip
+
+  release:
+    name: Publish GitCode release
+    needs: build
+    runs-on: euleros-2.10.1
+    steps:
+      - name: Checkout
+        uses: checkout-action@0.0.1
+
+      - name: Compute version
+        id: ver_calc_release
+        working-directory: repo_workspace
+        run: |
+          INPUT_TAG="${{ ATOMGIT_INPUTS_tag_name }}"
+          REF="${{ ATOMGIT_REF }}"
+          if [ -n "$INPUT_TAG" ]; then
+            VERSION="$INPUT_TAG"
+          elif [[ "$REF" == refs/tags/v* ]]; then
+            VERSION="${REF#refs/tags/}"
+          else
+            VERSION="v$(jq -r .version package.json)"
+          fi
+          echo "::set-output name=version::$VERSION"
+          echo "Release version: $VERSION"
+
+      - name: Download all artifacts
+        uses: download-artifact-action@0.0.1
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Create GitCode release and upload assets
+        env:
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          REPOSITORY: ${{ ATOMGIT_REPOSITORY }}
+          VERSION: ${{ steps.ver_calc_release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITCODE_TOKEN:-}" ]; then
+            echo "GITCODE_TOKEN 未配置，跳过 release 发布；产物已作为 artifact 上传。"
+            ls -la assets/
+            exit 0
+          fi
+          API_BASE="https://gitcode.com/api/v5/repos/${REPOSITORY}"
+          BODY=$(jq -n --arg tag "$VERSION" --arg name "$VERSION" \
+            '{tag_name:$tag, name:$name, body:"sa-cmd release "$name, target_commitish:"main"}')
+          echo "Creating release $VERSION"
+          REL=$(curl -sS -X POST "${API_BASE}/releases" \
+            -H "PRIVATE-TOKEN: $GITCODE_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          REL_ID=$(echo "$REL" | jq -r '.id // empty')
+          if [ -z "$REL_ID" ]; then
+            echo "创建 release 失败：$REL" >&2
+            exit 1
+          fi
+          echo "Release id=$REL_ID"
+          # Gitea v5 上传附件 form 字段名为 attachment；若 GitCode 实际用 file，按日志调整
+          for f in assets/*.zip; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f")
+            echo "Uploading $name"
+            curl -sS -X POST "${API_BASE}/releases/${REL_ID}/assets?name=${name}" \
+              -H "PRIVATE-TOKEN: $GITCODE_TOKEN" \
+              -F "attachment=@$f"
+          done

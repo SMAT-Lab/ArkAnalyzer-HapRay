@@ -1,0 +1,177 @@
+name: Release
+
+# 触发：推送 v* tag，或手动 dispatch（可指定 tag_name）
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag（如 v1.0.0）；留空则用 package.json 的 v<version>"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build sa-cmd (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 4 个发布目标，平台 key 与 SKILL 仓 tools.toml 一致
+          - os: macos-14        # Apple Silicon arm64
+            platform: darwin-arm64
+          - os: macos-13        # Intel x86_64
+            platform: darwin-x86_64
+          - os: ubuntu-latest   # x86_64
+            platform: linux-x86_64
+          - os: windows-latest  # x86_64
+            platform: windows-x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build binary
+        run: bun run build.bun.ts -- --binary
+
+      - name: Sign and notarize (macOS)
+        if: startsWith(matrix.platform, 'darwin')
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          BIN="dist/tools/sa-cmd/hapray-sa-cmd"
+          # 无证书时优雅跳过：二进制仍可用，仅浏览器直下会提示"已损坏"（curl 下载不受影响）
+          if [ -z "${APPLE_CERTIFICATE:-}" ] || [ -z "${APPLE_API_PRIVATE_KEY:-}" ]; then
+            echo "⚠️  Apple 签名/公证 secrets 未配置，跳过；二进制为未签名状态。"
+            exit 0
+          fi
+          # 1. 导入 Developer ID Application 证书到临时 keychain
+          KC_PASS="$(uuidgen)"
+          KC="build-$$.keychain-db"
+          security create-keychain -p "$KC_PASS" "$KC"
+          security default-keychain -s "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -t 3600 -u "$KC"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 -k "$KC" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASS" "$KC"
+          rm -f /tmp/cert.p12
+          # 2. entitlements 见仓库 entitlements.plist（Bun 内嵌 JavaScriptCore 需 JIT，Hardened Runtime 下必须放行）
+          # 3. codesign（Hardened Runtime + 时间戳）
+          codesign --sign "$APPLE_SIGNING_IDENTITY" --force --options runtime --timestamp \
+            --entitlements entitlements.plist "$BIN"
+          codesign -dv "$BIN" 2>&1 | grep -E "Runtime|Signature"
+          # 4. notarize：提交单二进制 zip，--wait 阻塞至出结果
+          ditto -c -k --keepParent "$BIN" /tmp/notarize.zip
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          xcrun notarytool submit /tmp/notarize.zip \
+            --key "$KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+          # 5. raw Mach-O 无法 staple（stapler 仅支持 .app/.dmg/.pkg）；公证票据走在线校验
+          security delete-keychain "$KC" 2>/dev/null || true
+          echo "✅ 签名+公证完成"
+
+      - name: Compute version
+        id: ver
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # 优先级：dispatch 输入 > push 触发的 tag(ref_name) > package.json
+          if [ -n "$INPUT_TAG" ]; then
+            VERSION="$INPUT_TAG"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            VERSION="$REF_NAME"   # 形如 v1.0.0
+          else
+            VERSION="v$(node -p "require('./package.json').version")"
+          fi
+          # 去掉前导 v 得到文件名用的裸版本号（如 1.0.0）
+          VER="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Zip artifact (unix)
+        if: matrix.platform != 'windows-x86_64'
+        shell: bash
+        run: |
+          ZIP="sa-cmd-${{ matrix.platform }}-${{ steps.ver.outputs.ver }}.zip"
+          # 打包 sa-cmd 目录内容（不含顶层 sa-cmd/ 壳），与 tools.toml to= 解压到 sa-cmd/ 的约定一致
+          cd dist/tools/sa-cmd && zip -rX "$GITHUB_WORKSPACE/$ZIP" .
+
+      - name: Zip artifact (windows)
+        if: matrix.platform == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          $zip = "sa-cmd-${{ matrix.platform }}-${{ steps.ver.outputs.ver }}.zip"
+          Compress-Archive -Path dist\tools\sa-cmd\* -DestinationPath "$env:GITHUB_WORKSPACE\$zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa-cmd-${{ matrix.platform }}
+          path: "sa-cmd-${{ matrix.platform }}-${{ steps.ver.outputs.ver }}.zip"
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # 仅需 package.json 供版本回退，浅克隆即可
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Compute version
+        id: ver
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            VERSION="$INPUT_TAG"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            VERSION="$REF_NAME"
+          else
+            VERSION="v$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: List assets
+        run: ls -la assets/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          files: assets/*.zip
+          generate_release_notes: true
