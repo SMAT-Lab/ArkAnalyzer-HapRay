@@ -246,6 +246,30 @@ interface GcThreadStepData {
 
 export type GcThreadData = Record<string, GcThreadStepData>;
 
+export interface ThermalSensorStats {
+  start: number;
+  end: number;
+  max: number;
+  min: number;
+  avg: number;
+  rise: number;
+}
+
+export interface ThermalStepData {
+  status: string;
+  sample_count: number;
+  interval_seconds: number;
+  duration_s: number;
+  statistics: Record<string, ThermalSensorStats>;
+  series: {
+    elapsed_s: number[];
+    wall_time: string[];
+    sensors: Record<string, (number | null)[]>;
+  };
+}
+
+export type ThermalData = Record<string, ThermalStepData>;
+
 interface ComponentResuStepData {
   total_builds: number;
   recycled_builds: number;
@@ -450,6 +474,7 @@ interface TraceData {
   vsyncAnomaly?: VSyncAnomalyData;
   faultTree?: FaultTreeData;
   redundantThread?: Record<string, { redundant_threads_summary?: RedundantThreadStepData; summary?: unknown }>;
+  thermal?: ThermalData;
 }
 
 interface MoreData {
@@ -1204,6 +1229,7 @@ interface JsonDataState {
   vsyncAnomalyData: VSyncAnomalyData | null;
   faultTreeData: FaultTreeData | null;
   redundantThreadData: RedundantThreadData | null;
+  thermalData: ThermalData | null;
   compareFaultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
@@ -1297,6 +1323,7 @@ export const useJsonDataStore = defineStore('config', {
     vsyncAnomalyData: null,
     faultTreeData: null,
     redundantThreadData: null,
+    thermalData: null,
     compareFaultTreeData: null,
     baseMark: null,
     compareMark: null,
@@ -1479,6 +1506,7 @@ export const useJsonDataStore = defineStore('config', {
           vsyncAnomaly: this.decompressTraceField(jsonData.trace.vsyncAnomaly),
           faultTree: jsonData.trace.faultTree,
           redundantThread: jsonData.trace.redundantThread,
+          thermal: jsonData.trace.thermal,
         };
 
         // Safely process all trace-related data
@@ -1491,6 +1519,8 @@ export const useJsonDataStore = defineStore('config', {
         this.vsyncAnomalyData = safeProcessVSyncAnomalyData(decompressedTrace.vsyncAnomaly);
         this.faultTreeData = safeProcessFaultTreeData(decompressedTrace.faultTree);
         this.redundantThreadData = safeProcessRedundantThreadData(decompressedTrace.redundantThread);
+        // 温度数据：无数据时保持 null，前端据此隐藏温度分析入口
+        this.thermalData = decompressedTrace.thermal ?? null;
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
@@ -1502,6 +1532,7 @@ export const useJsonDataStore = defineStore('config', {
         this.vsyncAnomalyData = getDefaultVSyncAnomalyData();
         this.faultTreeData = getDefaultFaultTreeData();
         this.redundantThreadData = getDefaultRedundantThreadData();
+        this.thermalData = null;
       }
       if (jsonData.more) {
         // Flame graph - Data organized by step, each step is separately compressed

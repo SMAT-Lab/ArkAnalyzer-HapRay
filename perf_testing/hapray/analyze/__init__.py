@@ -38,6 +38,7 @@ ANALYZER_CLASSES = [
     'UIAnalyzer',
     'IpcBinderAnalyzer',  # IPC binder 事务分析器
     'ThreadAnalyzer',  # 线程唤醒链与冗余分析（来自 standalone_tools/thread_analysis 合并）
+    'ThermalAnalyzer',  # 温度采集数据分析器
     # Add more analyzers here
 ]
 
