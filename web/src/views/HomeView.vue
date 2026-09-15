@@ -62,6 +62,7 @@
           <NativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
           <PerfUIAnimate v-else-if="showPage.startsWith('ui_animate_step_')" :step-id="getUIAnimateStepId(showPage)" />
           <HilogAnalysis v-else-if="showPage.startsWith('hilog_step_')" :step-id="getHilogStepId(showPage)" />
+          <ThermalStepAnalysis v-else-if="showPage.startsWith('thermal_step_')" :step-id="getThermalStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
           <CompareOverview v-else-if="showPage === 'compare_overview'" @navigate="changeContent" />
@@ -155,6 +156,7 @@ import FlameGraph from '@/components/single-analysis/step/flame/FlameGraph.vue';
 import NativeMemory from '@/components/single-analysis/step/memory/NativeMemory.vue';
 import PerfUIAnimate from '@/components/single-analysis/step/ui-animate/PerfUIAnimate.vue';
 import HilogAnalysis from '@/components/single-analysis/step/hilog/HilogAnalysis.vue';
+import ThermalStepAnalysis from '@/components/single-analysis/step/thermal/ThermalStepAnalysis.vue';
 import ComponentsDeps from '@/components/single-analysis/deps/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
@@ -202,6 +204,7 @@ function parseHashToPage(hash: string): string | null {
       'memory': 'memory_step_',
       'ui': 'ui_animate_step_',
       'hilog': 'hilog_step_',
+      'thermal': 'thermal_step_',
     };
     const prefix = stepPrefix[type];
     if (!prefix) return null;
@@ -238,6 +241,8 @@ function pageToHashPath(page: string): string {
   if (uiStep) return `/step/${uiStep[1]}/ui`;
   const hilogStep = page.match(/^hilog_step_(\d+)$/);
   if (hilogStep) return `/step/${hilogStep[1]}/hilog`;
+  const thermalStep = page.match(/^thermal_step_(\d+)$/);
+  if (thermalStep) return `/step/${thermalStep[1]}/thermal`;
   const compareLoad = page.match(/^compare_step_load_(\d+)$/);
   if (compareLoad) return `/compare/step/${compareLoad[1]}/load`;
   const compareDetail = page.match(/^compare_step_detail_(\d+)$/);
@@ -386,6 +391,12 @@ const getHilogStepId = (pageId: string): number => {
   return match ? parseInt(match[1]) : 1;
 };
 
+// 从温度分析页面ID中提取步骤ID
+const getThermalStepId = (pageId: string): number => {
+  const match = pageId.match(/thermal_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
 // 动态获取步骤页面标题
 const getStepPageTitle = (pageId: string): string => {
   const stepId = getStepId(pageId);
@@ -504,6 +515,18 @@ const getHilogStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / 日志分析`;
 };
 
+// 动态获取温度分析步骤页面标题
+const getThermalStepPageTitle = (pageId: string): string => {
+  const stepId = getThermalStepId(pageId);
+  return `步骤${stepId} 温度分析`;
+};
+
+// 动态获取温度分析步骤页面面包屑
+const getThermalStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getThermalStepId(pageId);
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 温度分析`;
+};
+
 const getPageTitle = () => {
   if (showPage.value.startsWith('perf_step_')) {
     return getStepPageTitle(showPage.value);
@@ -528,6 +551,9 @@ const getPageTitle = () => {
   }
   if (showPage.value.startsWith('hilog_step_')) {
     return getHilogStepPageTitle(showPage.value);
+  }
+  if (showPage.value.startsWith('thermal_step_')) {
+    return getThermalStepPageTitle(showPage.value);
   }
   return pageTitles[showPage.value] || '未知页面';
 };
@@ -557,6 +583,9 @@ const getBreadcrumb = () => {
   if (showPage.value.startsWith('hilog_step_')) {
     return getHilogStepPageBreadcrumb(showPage.value);
   }
+  if (showPage.value.startsWith('thermal_step_')) {
+    return getThermalStepPageBreadcrumb(showPage.value);
+  }
   return breadcrumbMap[showPage.value] || '首页';
 };
 
@@ -585,7 +614,8 @@ const shouldShowSteps = () => {
          showPage.value.startsWith('flame_step_') ||
          showPage.value.startsWith('memory_step_') ||
          showPage.value.startsWith('ui_animate_step_') ||
-         showPage.value.startsWith('hilog_step_');
+         showPage.value.startsWith('hilog_step_') ||
+         showPage.value.startsWith('thermal_step_');
 };
 
 // 获取当前步骤信息（计算属性）
@@ -608,6 +638,8 @@ const currentStepInfo = computed(() => {
     currentStepId = getUIAnimateStepId(showPage.value);
   } else if (showPage.value.startsWith('hilog_step_')) {
     currentStepId = getHilogStepId(showPage.value);
+  } else if (showPage.value.startsWith('thermal_step_')) {
+    currentStepId = getThermalStepId(showPage.value);
   }
 
   if (currentStepId) {

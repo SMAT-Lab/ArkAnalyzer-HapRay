@@ -111,6 +111,13 @@
               </el-icon>
               <span>日志分析</span>
             </el-menu-item>
+
+            <el-menu-item v-if="getHasThermalData(step.id)" :index="`thermal_step_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Sunny />
+              </el-icon>
+              <span>温度分析</span>
+            </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
       </el-sub-menu>
@@ -255,7 +262,8 @@ import {
   Upload,
   Share,
   Coin,
-  Picture
+  Picture,
+  Sunny
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{
@@ -296,6 +304,7 @@ const jsonDataStore = useJsonDataStore();
 const memoryDataCache = ref<Record<number, boolean>>({});
 const uiAnimateDataCache = ref<Record<number, boolean>>({});
 const perfDataCache = ref<Record<number, boolean>>({});
+const thermalDataCache = ref<Record<number, boolean>>({});
 const isDevMode = import.meta.env.DEV;
 
 const testSteps = computed(() => {
@@ -416,6 +425,18 @@ const getHasPerfData = (stepId: number): boolean => {
   return perfDataCache.value[stepId] || false;
 };
 
+// 检查步骤是否有温度分析数据
+const checkThermalData = (stepId: number) => {
+  const thermalData = jsonDataStore.thermalData;
+  const stepKey = `step${stepId}`;
+  thermalDataCache.value[stepId] = !!(thermalData && thermalData[stepKey]);
+};
+
+// 获取步骤是否有温度分析数据
+const getHasThermalData = (stepId: number): boolean => {
+  return thermalDataCache.value[stepId] || false;
+};
+
 // 获取步骤是否有日志分析数据（来自 summary）
 const getHasLogData = (stepId: number): boolean => {
   const summary = jsonDataStore.summary as Array<{ step_id?: string; log?: Record<string, unknown> }> | undefined;
@@ -434,6 +455,7 @@ watch(() => testSteps.value, (newSteps) => {
     void checkMemoryData(step.id);
     checkUIAnimateData(step.id);
     checkPerfData(step.id);
+    checkThermalData(step.id);
   });
 }, { immediate: true });
 
