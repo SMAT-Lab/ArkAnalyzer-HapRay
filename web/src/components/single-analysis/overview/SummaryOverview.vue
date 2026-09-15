@@ -426,7 +426,8 @@ const formatThermal = (v: ThermalStepData | null): string => {
       riseSensor = sensor;
     }
   }
-  return `峰值 ${maxTemp.toFixed(1)}°C(${maxSensor})，温升 +${maxRise.toFixed(1)}°C(${riseSensor})`;
+  const riseStr = maxRise >= 0 ? `+${maxRise.toFixed(1)}` : maxRise.toFixed(1);
+  return `峰值 ${maxTemp.toFixed(1)}°C(${maxSensor})，温升 ${riseStr}°C(${riseSensor})`;
 };
 
 /** 温度是否有异常（用于指标 chip 高亮）：温升 ≥ 5°C 或峰值 ≥ 45°C */

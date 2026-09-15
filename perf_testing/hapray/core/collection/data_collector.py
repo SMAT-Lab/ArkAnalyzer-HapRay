@@ -442,6 +442,10 @@ class DataCollector:
         thermal_file = os.path.join(report_path, 'thermal', f'step{step_id}', 'thermal_data.jsonl')
         self._ensure_directories_exist(os.path.dirname(thermal_file))
 
+        # 截断上次采集残留（同一步骤重启或用例重试时复用同一文件）
+        with open(thermal_file, 'w', encoding='utf-8'):
+            pass
+
         start_time = time.time()
         collection_count = 0
 

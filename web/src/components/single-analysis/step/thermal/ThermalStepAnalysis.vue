@@ -36,7 +36,7 @@
               <el-table-column prop="avg" label="平均 (°C)" width="110" />
               <el-table-column prop="rise" label="温升 (°C)" width="110" sortable>
                 <template #default="scope">
-                  <span :class="riseClass(scope.row.rise)">+{{ scope.row.rise.toFixed(2) }}</span>
+                  <span :class="riseClass(scope.row.rise)">{{ formatRise(scope.row.rise) }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -82,6 +82,10 @@ function riseClass(rise: number): string {
   if (rise >= 5) return 'rise-high';
   if (rise >= 2) return 'rise-medium';
   return 'rise-low';
+}
+
+function formatRise(rise: number): string {
+  return rise >= 0 ? `+${rise.toFixed(2)}` : rise.toFixed(2);
 }
 
 function formatDuration(seconds: number): string {
