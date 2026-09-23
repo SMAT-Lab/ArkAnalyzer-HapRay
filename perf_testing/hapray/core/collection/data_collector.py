@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import os
 import threading
 import time
@@ -59,6 +60,8 @@ class DataCollector:
         self.memory_collection_threads: dict[int, dict] = {}  # step_id -> {'thread': thread, 'stop_event': event}
         # 性能采集线程管理
         self.perf_collection_threads: dict[int, threading.Thread] = {}  # step_id -> thread
+        # 温度采集线程管理
+        self.thermal_collection_threads: dict[int, dict] = {}  # step_id -> {'thread': thread, 'stop_event': event}
 
     # ==================== 公共接口 ====================
 
@@ -88,6 +91,7 @@ class DataCollector:
         self.process_manager.save_process_info(perf_step_dir)
 
         self._start_collect_memory_data(step_id, report_path)  # 持续到步骤结束
+        self._start_collect_thermal_data(step_id, report_path)  # 持续到步骤结束
 
         Log.info(f'步骤 {step_id} 开始采集准备完成')
 
@@ -123,6 +127,7 @@ class DataCollector:
 
         Log.info(f'开始步骤 {step_id} 的数据采集结束处理')
         self._stop_memory_collection(step_id)
+        self._stop_thermal_collection(step_id)
 
         perf_step_dir, trace_step_dir = self._get_step_directories(step_id, report_path)
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
@@ -386,6 +391,153 @@ class DataCollector:
             Log.info(f'步骤 {step_id} 的内存采集线程已停止')
         else:
             Log.warning(f'步骤 {step_id} 没有活跃的内存采集线程')
+
+    def _start_collect_thermal_data(
+        self, step_id: int, report_path: str, interval_seconds: int = Config.get('thermal.interval_seconds', 5)
+    ):
+        """
+        启动温度采集后台线程（私有方法）
+
+        Args:
+            step_id: 步骤ID
+            report_path: 报告路径
+            interval_seconds: 采集间隔（秒）
+        """
+        if not Config.get('thermal.enable', True):
+            Log.debug(f'温度采集已关闭，跳过步骤 {step_id}')
+            return
+
+        # 如果该步骤已有活跃的采集线程，先停止它
+        if step_id in self.thermal_collection_threads:
+            self._stop_thermal_collection(step_id)
+
+        # 创建停止事件
+        stop_event = threading.Event()
+
+        # 创建并启动采集线程
+        thread = threading.Thread(
+            target=self._thermal_collection_worker,
+            args=(step_id, report_path, interval_seconds, stop_event),
+            daemon=True,
+        )
+
+        # 保存线程信息
+        self.thermal_collection_threads[step_id] = {'thread': thread, 'stop_event': stop_event}
+
+        thread.start()
+        Log.debug(f'启动步骤 {step_id} 的温度数据采集线程，每 {interval_seconds}s 采集一次，持续直到停止')
+
+    def _thermal_collection_worker(self, step_id: int, report_path: str, interval_seconds: int, stop_event: threading.Event):
+        """
+        温度采集工作线程
+
+        Args:
+            step_id: 步骤ID
+            report_path: 报告路径
+            interval_seconds: 采集间隔（秒）
+            stop_event: 停止事件
+        """
+        Log.debug(f'温度采集线程启动：步骤 {step_id}，持续采集，间隔 {interval_seconds}s')
+
+        thermal_file = os.path.join(report_path, 'thermal', f'step{step_id}', 'thermal_data.jsonl')
+        self._ensure_directories_exist(os.path.dirname(thermal_file))
+
+        # 截断上次采集残留（同一步骤重启或用例重试时复用同一文件）
+        with open(thermal_file, 'w', encoding='utf-8'):
+            pass
+
+        start_time = time.time()
+        collection_count = 0
+
+        while not stop_event.is_set():
+            collection_count += 1
+
+            # 记录采集开始时间
+            collection_start_time = time.time()
+
+            try:
+                result = self.driver.shell("hidumper -s ThermalService -a '-t'")
+                sensors = self.parse_thermal_output(result)
+                if not sensors:
+                    Log.warning(f'步骤 {step_id} 第 {collection_count} 次温度数据解析为空，跳过')
+                else:
+                    record = {
+                        'elapsed_s': round(collection_start_time - start_time, 3),
+                        'wall_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'sensors': sensors,
+                    }
+                    with open(thermal_file, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps(record, ensure_ascii=False) + '\n')
+                    Log.debug(f'步骤 {step_id} 第 {collection_count} 次温度数据采集完成: {sensors}')
+            except Exception as e:
+                Log.error(f'步骤 {step_id} 第 {collection_count} 次温度数据采集失败: {e}')
+
+            # 计算采集耗时，等待下一次采集或停止事件
+            collection_elapsed = time.time() - collection_start_time
+            wait_time = max(0, interval_seconds - collection_elapsed)
+
+            if stop_event.wait(timeout=wait_time):
+                # 被停止事件唤醒，退出循环
+                break
+
+        Log.info(f'步骤 {step_id} 温度数据采集线程结束，共采集 {collection_count} 次')
+
+    @staticmethod
+    def parse_thermal_output(output: str) -> dict[str, float]:
+        """
+        解析 hidumper -s ThermalService -a '-t' 的输出
+
+        输出格式：
+            Type: Battery
+            Temperature: 26000
+
+        单位归一化：多数传感器单位为 0.001°C（如 26000 表示 26.0°C），
+        个别传感器（如 modem）直接上报摄氏度（如 28）。
+        统一策略：绝对值 >= 1000 视为毫摄氏度，除以 1000 转换为摄氏度。
+
+        Args:
+            output: hidumper 命令输出
+
+        Returns:
+            传感器名 -> 温度（摄氏度）的字典
+        """
+        sensors: dict[str, float] = {}
+        current_type = None
+        for raw_line in output.splitlines():
+            line = raw_line.strip()
+            if line.startswith('Type:'):
+                current_type = line[len('Type:'):].strip()
+            elif line.startswith('Temperature:') and current_type is not None:
+                try:
+                    raw = float(line[len('Temperature:'):].strip())
+                except ValueError:
+                    current_type = None
+                    continue
+                if abs(raw) >= 1000:
+                    raw = raw / 1000.0
+                sensors[current_type] = round(raw, 2)
+                current_type = None
+        return sensors
+
+    def _stop_thermal_collection(self, step_id: int):
+        """
+        停止指定步骤的温度采集线程（私有方法）
+
+        Args:
+            step_id: 步骤ID
+        """
+        if step_id in self.thermal_collection_threads:
+            thread_info = self.thermal_collection_threads[step_id]
+            thread_info['stop_event'].set()  # 设置停止事件
+            thread_info['thread'].join(timeout=5)  # 等待线程结束，最多5秒
+
+            if thread_info['thread'].is_alive():
+                Log.warning(f'步骤 {step_id} 的温度采集线程未能及时停止')
+
+            del self.thermal_collection_threads[step_id]
+            Log.info(f'步骤 {step_id} 的温度采集线程已停止')
+        else:
+            Log.debug(f'步骤 {step_id} 没有活跃的温度采集线程')
 
     def _collect_smaps_data(self, pid: int, process_name: str, showmap_dir: str, timestamp: str):
         """采集单个进程的smaps数据

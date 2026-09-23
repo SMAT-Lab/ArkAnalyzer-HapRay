@@ -26,6 +26,19 @@ node hapray-sa-cmd.js hapray hap -i app.hap -o ./output -f all
 - `-f, --format <format>`: 输出格式：json, html, excel, all（默认：all）
 - `-j, --jobs <number>`: 并发分析数量，默认为CPU核心数
 
+### 工作目录
+
+默认情况下，日志、运行时文件和相对输出路径位于当前工作目录。可以设置
+`HAPRAY_WORKSPACE`，将这些文件统一放到指定工作区，便于 skill 或 CI 收集产物：
+
+```bash
+HAPRAY_WORKSPACE=/tmp/hapray-workspace node hapray-sa-cmd.js hapray hap \
+  -i app.hap -o ./output
+```
+
+显式传入的绝对输出路径始终保持不变。如果当前工作目录不可写且未设置该环境变量，
+工具才会回退到用户目录下的 `ArkAnalyzer-HapRay` 目录。
+
 ### 并发处理示例
 ```bash
 # 使用4个并发任务

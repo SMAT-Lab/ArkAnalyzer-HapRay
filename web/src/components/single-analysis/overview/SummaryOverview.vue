@@ -14,7 +14,7 @@
         </el-button>
       </div>
       <p class="summary-desc">
-        汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、冗余线程分析、Image 超尺寸统计以及组件树上/未上树节点情况。
+        汇总各步骤的关键信息，包括内存汇总（跨步骤累计）、组件复用、故障树识别结果、冗余线程分析、Image 超尺寸统计、组件树上/未上树节点情况以及设备温度温升情况。
       </p>
     </div>
 
@@ -115,11 +115,21 @@
           </span>
         </div>
         <div class="rule-item">
+          <strong>温度：</strong>
+          <span>温升 ≥ 5°C 时显示，≥ 10°C 为严重；峰值温度 ≥ 45°C 时显示，≥ 48°C 为严重。无温度数据（旧报告）时不显示。</span>
+        </div>
+        <div class="rule-item">
           <strong>技术栈与日志：</strong>
           <span>不在此页面显示</span>
         </div>
       </div>
     </el-card>
+
+    <!-- 内存汇总（跨步骤累计，数据来自报告 DB，无内存数据时自动隐藏） -->
+    <MemorySummary @page-change="goToDetail" />
+
+    <!-- 温度总览曲线（跨步骤拼接，数据来自 trace.thermal，无温度数据时自动隐藏） -->
+    <ThermalOverallChart />
 
     <!-- 步骤导航 -->
     <div v-if="summaryItems.length" class="step-nav">
@@ -186,6 +196,16 @@
             {{ formatComponentTree(item.component_tree) }}
           </span>
         </div>
+        <div
+          v-if="getThermalData(item.step_id)"
+          class="metric-chip"
+          :class="{ 'has-issue': getThermalIssueLevel(getThermalData(item.step_id)) }"
+        >
+          <span class="metric-label">温度</span>
+          <span class="metric-value">
+            {{ formatThermal(getThermalData(item.step_id)) }}
+          </span>
+        </div>
       </div>
 
       <el-table
@@ -226,6 +246,9 @@
 import { computed, ref } from 'vue';
 import { Download } from '@element-plus/icons-vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
+import type { ThermalStepData } from '@/stores/jsonDataStore.ts';
+import MemorySummary from './MemorySummary.vue';
+import ThermalOverallChart from './ThermalOverallChart.vue';
 
 const emit = defineEmits<{ (e: 'page-change', page: string): void }>();
 
@@ -376,6 +399,44 @@ const formatComponentTree = (v?: SummaryItem['component_tree']) => {
   if (!v || (v.total_nodes ?? 0) === 0) return '—';
   const ratio = ((v.off_tree_ratio ?? 0) * 100).toFixed(1);
   return `未上树 ${ratio}%`;
+};
+
+// ==================== 温度（数据来自 trace.thermal，直接从 store 读取） ====================
+
+/** 获取步骤的温度统计数据 */
+const getThermalData = (stepId: string): ThermalStepData | null => {
+  const idx = getStepIndex(stepId);
+  return jsonDataStore.thermalData?.[`step${idx}`] ?? null;
+};
+
+/** 格式化温度概览：峰值温度 + 最大温升 */
+const formatThermal = (v: ThermalStepData | null): string => {
+  if (!v || !v.statistics || Object.keys(v.statistics).length === 0) return '—';
+  let maxSensor = '';
+  let maxTemp = -Infinity;
+  let riseSensor = '';
+  let maxRise = -Infinity;
+  for (const [sensor, stats] of Object.entries(v.statistics)) {
+    if (stats.max > maxTemp) {
+      maxTemp = stats.max;
+      maxSensor = sensor;
+    }
+    if (stats.rise > maxRise) {
+      maxRise = stats.rise;
+      riseSensor = sensor;
+    }
+  }
+  const riseStr = maxRise >= 0 ? `+${maxRise.toFixed(1)}` : maxRise.toFixed(1);
+  return `峰值 ${maxTemp.toFixed(1)}°C(${maxSensor})，温升 ${riseStr}°C(${riseSensor})`;
+};
+
+/** 温度是否有异常（用于指标 chip 高亮）：温升 ≥ 5°C 或峰值 ≥ 45°C */
+const getThermalIssueLevel = (v: ThermalStepData | null): boolean => {
+  if (!v || !v.statistics) return false;
+  const values = Object.values(v.statistics);
+  const maxTemp = Math.max(...values.map((s) => s.max));
+  const maxRise = Math.max(...values.map((s) => s.rise));
+  return maxRise >= 5 || maxTemp >= 45;
 };
 
 const scrollToStep = (stepIndex: number) => {
@@ -676,6 +737,35 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         detail: `${threadDisplay}检测到 ${threads} 个冗余线程${ratioStr}。`,
         severity,
         detailLink: { page: `fault_tree_step_${stepIdx}` },
+      });
+    }
+  }
+
+  // 7. 温度：温升 ≥ 5°C 或峰值 ≥ 45°C 时显示（可跳转温度分析）
+  const thermal = getThermalData(item.step_id);
+  if (thermal && thermal.statistics && Object.keys(thermal.statistics).length > 0) {
+    const statsEntries = Object.entries(thermal.statistics);
+    const [maxSensor, maxStats] = statsEntries.reduce((a, b) => (b[1].max > a[1].max ? b : a));
+    const [riseSensor, riseStats] = statsEntries.reduce((a, b) => (b[1].rise > a[1].rise ? b : a));
+    const maxTemp = maxStats.max;
+    const maxRise = riseStats.rise;
+
+    if (maxRise >= 5) {
+      const severity: '严重' | '中等' = maxRise >= 10 ? '严重' : '中等';
+      issues.push({
+        issue: `温升明显 (+${maxRise.toFixed(2)}°C)`,
+        detail: `传感器 ${riseSensor} 温度从 ${riseStats.start.toFixed(2)}°C 升至 ${riseStats.end.toFixed(2)}°C，温升 +${maxRise.toFixed(2)}°C`,
+        severity,
+        detailLink: { page: `thermal_step_${stepIdx}` },
+      });
+    }
+    if (maxTemp >= 45) {
+      const severity: '严重' | '中等' = maxTemp >= 48 ? '严重' : '中等';
+      issues.push({
+        issue: `设备温度偏高 (${maxTemp.toFixed(2)}°C)`,
+        detail: `传感器 ${maxSensor} 峰值温度 ${maxTemp.toFixed(2)}°C，超过 45°C`,
+        severity,
+        detailLink: { page: `thermal_step_${stepIdx}` },
       });
     }
   }

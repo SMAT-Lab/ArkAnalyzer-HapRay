@@ -49,6 +49,8 @@ import {
   fetchCallchainFrames,
   fetchRecordsUpToTimeByCategory,
   fetchRecordsUpToTimeByProcess,
+  fetchSummaryRecordsUpToTime,
+  fetchSummaryCallchainFrames,
 } from '@/stores/nativeMemory';
 import type {
   CallchainFrame,
@@ -71,7 +73,7 @@ interface FlameGraphNode {
 }
 
 interface OutstandingFlameGraphProps {
-  stepId: number;
+  stepId?: number;
   selectedTimePoint: number | null;
   drillLevel: DrillDownLevel;
   viewMode?: ViewMode;
@@ -83,15 +85,19 @@ interface OutstandingFlameGraphProps {
   // 选中的系列名称（来自时间线图表点击的线），用于进一步过滤（如小类/线程/文件）
   selectedSeriesName?: string;
   maxCallchains?: number;
+  // 汇总模式：跨步骤累计时间线（selectedTimePoint 为累计时间，记录携带 stepId）
+  summaryMode?: boolean;
 }
 
 const props = withDefaults(defineProps<OutstandingFlameGraphProps>(), {
+  stepId: undefined,
   maxCallchains: 200,
   viewMode: 'category',
   selectedProcess: '',
   selectedThread: '',
   selectedFile: '',
   selectedSeriesName: '',
+  summaryMode: false,
 });
 
 const flameGraphData = ref<FlameGraphNode[]>([]);
@@ -155,7 +161,10 @@ watch(
 );
 
 interface OutstandingEntry {
+  /** 帧查找键：普通模式为 callchainId 字符串；汇总模式为 `${stepId}:${callchainId}`（跨步骤 callchainId 会重叠） */
+  frameKey: string;
   callchainId: number;
+  stepId: number;
   value: number;
   allocCount: number;
   freeCount: number;
@@ -331,13 +340,18 @@ function filterRecordsBySeriesName(
 function calculateOutstanding(
   records: NativeMemoryRecord[],
 ): OutstandingEntry[] {
-  const outstandingMap = new Map<number, OutstandingEntry>();
+  const outstandingMap = new Map<string, OutstandingEntry>();
 
   records.forEach(record => {
     const callchainId = Number(record.callchainId ?? 0);
-    if (!outstandingMap.has(callchainId)) {
-      outstandingMap.set(callchainId, {
+    const stepId = Number(record.stepId ?? 0);
+    // 帧查找键：汇总模式下 callchainId 跨步骤重叠，必须以步骤区分
+    const frameKey = props.summaryMode ? `${stepId}:${callchainId}` : String(callchainId);
+    if (!outstandingMap.has(frameKey)) {
+      outstandingMap.set(frameKey, {
+        frameKey,
         callchainId,
+        stepId,
         value: 0,
         allocCount: 0,
         freeCount: 0,
@@ -345,7 +359,7 @@ function calculateOutstanding(
       });
     }
 
-    const entry = outstandingMap.get(callchainId)!;
+    const entry = outstandingMap.get(frameKey)!;
     const size = record.heapSize || 0;
     entry.mergeCount += 1;
 
@@ -376,13 +390,14 @@ function calculateOutstanding(
 
 function buildFlameGraphData(
   outstandingEntries: OutstandingEntry[],
-  callchainFrames: CallchainFrameMap,
+  callchainFrames: CallchainFrameMap | Record<string, CallchainFrame[]>,
 ): FlameGraphNode[] {
   const root = new Map<string, TreeAccumulator>();
 
+  const framesIndex = callchainFrames as Record<string, CallchainFrame[]>;
   outstandingEntries.forEach(entry => {
-    const frames = entry.callchainId
-      ? callchainFrames[entry.callchainId]
+    const frames = entry.frameKey
+      ? framesIndex[entry.frameKey]
       : undefined;
     insertCallchainIntoTree(root, frames, entry);
   });
@@ -414,6 +429,7 @@ async function refreshData(): Promise<void> {
   const currentSelectedFile = props.selectedFile;
   const currentSelectedTimePoint = props.selectedTimePoint!;
   const currentStepId = props.stepId;
+  const currentSummaryMode = props.summaryMode;
 
   try {
     let category: string | undefined;
@@ -462,22 +478,35 @@ async function refreshData(): Promise<void> {
       }
     }
 
-    let records =
-      currentViewMode === 'category'
-        ? await fetchRecordsUpToTimeByCategory(
-            currentStepId,
-            currentSelectedTimePoint,
-            category,
-            subCategory,
-            file,
-          )
-        : await fetchRecordsUpToTimeByProcess(
-            currentStepId,
-            currentSelectedTimePoint,
-            process,
-            thread,
-            file,
-          );
+    // 汇总模式：跨步骤取截至累计时间点的记录；普通模式：单步骤取截至时间点的记录
+    let records: NativeMemoryRecord[];
+    if (currentSummaryMode) {
+      records = await fetchSummaryRecordsUpToTime(
+        currentViewMode,
+        currentSelectedTimePoint,
+        category,
+        subCategory,
+        process,
+        thread,
+        file,
+      );
+    } else if (currentViewMode === 'category') {
+      records = await fetchRecordsUpToTimeByCategory(
+        currentStepId!,
+        currentSelectedTimePoint,
+        category,
+        subCategory,
+        file,
+      );
+    } else {
+      records = await fetchRecordsUpToTimeByProcess(
+        currentStepId!,
+        currentSelectedTimePoint,
+        process,
+        thread,
+        file,
+      );
+    }
     if (token !== requestToken) {
       return;
     }
@@ -493,14 +522,21 @@ async function refreshData(): Promise<void> {
       return;
     }
 
-    const targetCallchainIds = outstandingEntries
-      .map(entry => entry.callchainId)
-      .filter(id => id > 0);
-
-    const frames =
-      targetCallchainIds.length > 0
-        ? await fetchCallchainFrames(currentStepId, targetCallchainIds)
-        : ({} as CallchainFrameMap);
+    // 帧获取：汇总模式按 (stepId, callchainId) 分步取并合并；普通模式按 callchainId 取
+    let frames: CallchainFrameMap | Record<string, CallchainFrame[]>;
+    if (currentSummaryMode) {
+      frames = await fetchSummaryCallchainFrames(
+        outstandingEntries.map((entry) => ({ stepId: entry.stepId, callchainId: entry.callchainId }))
+      );
+    } else {
+      const targetCallchainIds = outstandingEntries
+        .map(entry => entry.callchainId)
+        .filter(id => id > 0);
+      frames =
+        targetCallchainIds.length > 0
+          ? await fetchCallchainFrames(currentStepId!, targetCallchainIds)
+          : ({} as CallchainFrameMap);
+    }
 
     if (token !== requestToken) {
       return;

@@ -79,6 +79,8 @@ export interface NativeMemoryRecord {
   // 聚合信息（仅用于 overview 层级）
   eventCount?: number; // 聚合的事件数量
   eventDetails?: string; // 聚合的事件详情（格式：eventType:heapSize|eventType:heapSize|...）
+  // 所属步骤（仅汇总模式：跨步骤累计时间线的记录携带，用于火焰图按步骤取调用链）
+  stepId?: number;
 }
 
 // Native Memory数据类型（包含统计信息和平铺记录）
@@ -105,6 +107,28 @@ export interface CompressedNativeMemoryStepData {
 
 export type NativeMemoryData = Record<string, NativeMemoryStepData>;
 export type CompressedNativeMemoryData = Record<string, CompressedNativeMemoryStepData | NativeMemoryStepData>;
+
+/** 汇总模式（跨步骤累计时间线）的步骤时间轴区间 */
+export interface SummaryStepRange {
+  stepId: number;
+  /** 该步骤在跨步骤累计时间轴上的起始秒数 */
+  startSec: number;
+  /** 该步骤在跨步骤累计时间轴上的结束秒数（不含） */
+  endSec: number;
+  /** 步骤时长（秒） */
+  durationSec: number;
+}
+
+/** 分类分布行（汇总饼图：大类或小类 .so 级的净内存统计） */
+export interface NativeMemoryDistributionRow {
+  name: string;
+  /** 净内存（字节，申请 - 释放，可能为负） */
+  netSize: number;
+  eventCount: number;
+}
+
+/** 步骤区间缓存（同一份报告的步骤时间轴不变） */
+let summaryStepRangesCache: SummaryStepRange[] | null = null;
 
 /**
  * 原生内存相关操作集合
@@ -366,7 +390,7 @@ export class NativeMemoryService {
     return map;
   }
 
-  private mapOverviewRow(row: SqlRow, groupBy: 'category' | 'process' = 'category'): NativeMemoryRecord {
+  private mapOverviewRow(row: SqlRow, groupBy: 'category' | 'process' = 'category', timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const groupName = String(row.groupName ?? '');
@@ -385,7 +409,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName: groupBy === 'category' ? groupName : '',
@@ -395,7 +419,7 @@ export class NativeMemoryService {
     };
   }
 
-  private mapCategoryRow(row: SqlRow, categoryName: string): NativeMemoryRecord {
+  private mapCategoryRow(row: SqlRow, categoryName: string, timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const subCategory = String(row.subCategoryName ?? '');
@@ -414,7 +438,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName,
@@ -424,7 +448,7 @@ export class NativeMemoryService {
     };
   }
 
-  private mapSubCategoryRow(row: SqlRow, categoryName: string, subCategoryName: string): NativeMemoryRecord {
+  private mapSubCategoryRow(row: SqlRow, categoryName: string, subCategoryName: string, timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const file = String(row.file ?? '');
@@ -443,7 +467,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName,
@@ -451,7 +475,7 @@ export class NativeMemoryService {
     };
   }
 
-  private mapProcessRow(row: SqlRow, processName: string): NativeMemoryRecord {
+  private mapProcessRow(row: SqlRow, processName: string, timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const thread = String(row.thread ?? '');
@@ -470,7 +494,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName: '',
@@ -480,7 +504,7 @@ export class NativeMemoryService {
     };
   }
 
-  private mapThreadRow(row: SqlRow, processName: string, threadName: string): NativeMemoryRecord {
+  private mapThreadRow(row: SqlRow, processName: string, threadName: string, timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const file = String(row.file ?? '');
@@ -499,7 +523,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName: '',
@@ -516,7 +540,7 @@ export class NativeMemoryService {
     });
   }
 
-  private mapFileEventTypeRow(row: SqlRow, categoryName: string, subCategoryName: string, fileName: string): NativeMemoryRecord {
+  private mapFileEventTypeRow(row: SqlRow, categoryName: string, subCategoryName: string, fileName: string, timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const eventType = String(row.eventType ?? '');
@@ -536,7 +560,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName,
@@ -544,7 +568,7 @@ export class NativeMemoryService {
     };
   }
 
-  private mapFileEventTypeRowForProcess(row: SqlRow, processName: string, threadName: string, fileName: string): NativeMemoryRecord {
+  private mapFileEventTypeRowForProcess(row: SqlRow, processName: string, threadName: string, fileName: string, timeOffsetSec = 0): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
     const eventType = String(row.eventType ?? '');
@@ -564,7 +588,7 @@ export class NativeMemoryService {
       addr: 0,
       callchainId: 0,
       heapSize: Math.abs(netSize),
-      relativeTs: timePoint10ms * 0.01,
+      relativeTs: timeOffsetSec + timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
       categoryName: '',
@@ -609,6 +633,267 @@ export class NativeMemoryService {
       categoryName,
       subCategoryName,
     };
+  }
+
+  // ==================== 汇总模式（跨步骤累计时间线） ====================
+
+  /**
+   * 加载所有步骤的时间轴区间（用于跨步骤累计时间线的偏移拼接与步骤区段标注）
+   *
+   * 步骤时长 = 步骤内最大事件时间 + 1 个时间桶（10ms），后续步骤的起始偏移为前序步骤时长之和。
+   * 结果缓存：同一份报告的步骤区间不变。
+   */
+  async loadSummaryStepRanges(): Promise<SummaryStepRange[]> {
+    if (summaryStepRangesCache) {
+      return summaryStepRangesCache;
+    }
+
+    const rows = await getDbApi().queryNetMemoryTimelineAll();
+    const maxTimePointByStep = new Map<number, number>();
+    for (const row of rows || []) {
+      const stepId = Number(row.step_id ?? 0);
+      const timePoint10ms = Number(row.timePoint10ms ?? 0);
+      const current = maxTimePointByStep.get(stepId);
+      if (current == null || timePoint10ms > current) {
+        maxTimePointByStep.set(stepId, timePoint10ms);
+      }
+    }
+
+    const ranges: SummaryStepRange[] = [];
+    let offsetSec = 0;
+    for (const stepId of Array.from(maxTimePointByStep.keys()).sort((a, b) => a - b)) {
+      const maxSec = (maxTimePointByStep.get(stepId) ?? 0) * 0.01;
+      const durationSec = maxSec + 0.01;
+      ranges.push({
+        stepId,
+        startSec: offsetSec,
+        endSec: offsetSec + durationSec,
+        durationSec,
+      });
+      offsetSec += durationSec;
+    }
+
+    summaryStepRangesCache = ranges;
+    return ranges;
+  }
+
+  private async summaryOffsetMap(): Promise<Map<number, number>> {
+    const ranges = await this.loadSummaryStepRanges();
+    const map = new Map<number, number>();
+    ranges.forEach((range) => map.set(range.stepId, range.startSec));
+    return map;
+  }
+
+  /** 汇总模式：总览层级（按大类/进程聚合所有步骤，时间为跨步骤累计时间轴） */
+  async fetchSummaryOverviewTimeline(groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().queryOverviewTimelineAll(groupBy),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapOverviewRow(row, groupBy, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 汇总模式：大类层级（按小类聚合所有步骤） */
+  async fetchSummaryCategoryRecords(categoryName: string): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().queryCategoryRecordsAll(categoryName),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapCategoryRow(row, categoryName, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 汇总模式：小类层级（按文件聚合所有步骤） */
+  async fetchSummarySubCategoryRecords(categoryName: string, subCategoryName: string): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().querySubCategoryRecordsAll(categoryName, subCategoryName),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapSubCategoryRow(row, categoryName, subCategoryName, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 汇总模式：进程层级（按线程聚合所有步骤） */
+  async fetchSummaryProcessRecords(processName: string): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().queryProcessRecordsAll(processName),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapProcessRow(row, processName, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 汇总模式：线程层级（按文件聚合所有步骤） */
+  async fetchSummaryThreadRecords(processName: string, threadName: string): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().queryThreadRecordsAll(processName, threadName),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapThreadRow(row, processName, threadName, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 汇总模式：文件层级事件类型（分类模式） */
+  async fetchSummaryFileEventTypeRecords(
+    categoryName: string,
+    subCategoryName: string,
+    fileName: string
+  ): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().queryFileEventTypeRecordsAll(categoryName, subCategoryName, fileName),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapFileEventTypeRow(row, categoryName, subCategoryName, fileName, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 汇总模式：文件层级事件类型（进程模式） */
+  async fetchSummaryFileEventTypeRecordsForProcess(
+    processName: string,
+    threadName: string,
+    fileName: string
+  ): Promise<NativeMemoryRecord[]> {
+    const [offsets, rows] = await Promise.all([
+      this.summaryOffsetMap(),
+      getDbApi().queryFileEventTypeRecordsForProcessAll(processName, threadName, fileName),
+    ]);
+    return (rows || []).map((row) =>
+      this.mapFileEventTypeRowForProcess(row, processName, threadName, fileName, offsets.get(Number(row.step_id ?? 0)) ?? 0)
+    );
+  }
+
+  /** 将跨步骤累计时间轴上的时间点解析为 (所属步骤ID, 步骤内相对时间秒) */
+  private resolveSummaryTimePoint(timeSec: number, ranges: SummaryStepRange[]): { stepId: number; innerSec: number } | null {
+    if (!ranges.length) return null;
+    const range =
+      ranges.find((r) => timeSec >= r.startSec && timeSec < r.endSec) ??
+      ranges[ranges.length - 1];
+    if (!range) return null;
+    return { stepId: range.stepId, innerSec: timeSec - range.startSec };
+  }
+
+  /**
+   * 汇总模式：查询截至跨步骤累计时间点的所有记录（带 stepId，用于火焰图计算未释放内存）
+   *
+   * 时间边界：选中时间点所属步骤之前的步骤取全部记录，所属步骤取步骤内相对时间 <= 选中点的记录。
+   */
+  async fetchSummaryRecordsUpToTime(
+    viewMode: 'category' | 'process',
+    relativeTsSeconds: number,
+    categoryName?: string,
+    subCategoryName?: string,
+    processName?: string,
+    threadName?: string,
+    fileName?: string
+  ): Promise<NativeMemoryRecord[]> {
+    const ranges = await this.loadSummaryStepRanges();
+    const resolved = this.resolveSummaryTimePoint(relativeTsSeconds, ranges);
+    if (!resolved) return [];
+
+    const innerNs = Math.floor(resolved.innerSec * 1_000_000_000);
+    const rows =
+      viewMode === 'category'
+        ? await getDbApi().queryRecordsUpToByCategoryAll(
+            resolved.stepId,
+            innerNs,
+            categoryName,
+            subCategoryName,
+            fileName
+          )
+        : await getDbApi().queryRecordsUpToByProcessAll(
+            resolved.stepId,
+            innerNs,
+            processName,
+            threadName,
+            fileName
+          );
+
+    return (rows || []).map((row) => {
+      const record = this.mapRawRecordRow(row);
+      record.stepId = Number(row.step_id ?? 0);
+      return record;
+    });
+  }
+
+  /**
+   * 汇总模式：按 (stepId, callchainId) 批量取调用链帧
+   *
+   * callchainId 在各步骤间会重叠（每步独立编号），因此以 `${stepId}:${callchainId}` 复合键返回。
+   */
+  async fetchSummaryCallchainFrames(
+    entries: Array<{ stepId: number; callchainId: number }>
+  ): Promise<Record<string, CallchainFrame[]>> {
+    const byStep = new Map<number, number[]>();
+    for (const entry of entries) {
+      if (!entry.callchainId || entry.callchainId < 0) continue;
+      if (!byStep.has(entry.stepId)) {
+        byStep.set(entry.stepId, []);
+      }
+      byStep.get(entry.stepId)!.push(entry.callchainId);
+    }
+
+    const result: Record<string, CallchainFrame[]> = {};
+    await Promise.all(
+      Array.from(byStep.entries()).map(async ([stepId, callchainIds]) => {
+        const uniqueIds = Array.from(new Set(callchainIds));
+        if (!uniqueIds.length) return;
+        const framesMap = await this.fetchCallchainFrames(stepId, uniqueIds);
+        for (const [callchainId, frames] of Object.entries(framesMap)) {
+          result[`${stepId}:${callchainId}`] = frames;
+        }
+      })
+    );
+    return result;
+  }
+
+  /** 将跨步骤累计时间轴上的时间点解析为 (所属步骤ID, 步骤内相对纳秒)；无时间点时返回 undefined（全场景） */
+  private async resolveSummaryBoundary(
+    timeSec?: number | null
+  ): Promise<{ selectedStepId: number; innerRelativeTs: number } | undefined> {
+    if (timeSec == null) return undefined;
+    const ranges = await this.loadSummaryStepRanges();
+    const resolved = this.resolveSummaryTimePoint(timeSec, ranges);
+    if (!resolved) return undefined;
+    return {
+      selectedStepId: resolved.stepId,
+      innerRelativeTs: Math.floor(resolved.innerSec * 1_000_000_000),
+    };
+  }
+
+  /** 汇总模式：按大类统计净内存分布（timeSec 为空时统计全场景所有步骤） */
+  async fetchSummaryCategoryDistribution(timeSec?: number | null): Promise<NativeMemoryDistributionRow[]> {
+    const boundary = await this.resolveSummaryBoundary(timeSec);
+    const rows = await getDbApi().queryCategoryDistributionAll(boundary?.selectedStepId, boundary?.innerRelativeTs);
+    return (rows || []).map((row) => ({
+      name: String(row.categoryName ?? ''),
+      netSize: Number(row.netSize ?? 0),
+      eventCount: Number(row.eventCount ?? 0),
+    }));
+  }
+
+  /** 汇总模式：按小类（.so / 库文件）统计指定大类下的净内存分布（timeSec 为空时统计全场景所有步骤） */
+  async fetchSummarySubCategoryDistribution(
+    categoryName: string,
+    timeSec?: number | null
+  ): Promise<NativeMemoryDistributionRow[]> {
+    const boundary = await this.resolveSummaryBoundary(timeSec);
+    const rows = await getDbApi().querySubCategoryDistributionAll(
+      categoryName,
+      boundary?.selectedStepId,
+      boundary?.innerRelativeTs
+    );
+    return (rows || []).map((row) => ({
+      name: String(row.subCategoryName ?? ''),
+      netSize: Number(row.netSize ?? 0),
+      eventCount: Number(row.eventCount ?? 0),
+    }));
   }
 
   private parseAddress(value: unknown): number {
@@ -737,4 +1022,99 @@ export function fetchFileEventTypeRecordsForProcess(
   fileName: string
 ): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchFileEventTypeRecordsForProcess(stepId, processName, threadName, fileName);
+}
+
+// ==================== 汇总模式（跨步骤累计时间线） ====================
+
+/** 加载所有步骤的时间轴区间（跨步骤累计时间线的偏移拼接基准） */
+export function fetchSummaryStepRanges(): Promise<SummaryStepRange[]> {
+  return nativeMemoryService.loadSummaryStepRanges();
+}
+
+/** 汇总模式：总览层级 */
+export function fetchSummaryOverviewTimeline(groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryOverviewTimeline(groupBy);
+}
+
+/** 汇总模式：大类层级 */
+export function fetchSummaryCategoryRecords(categoryName: string): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryCategoryRecords(categoryName);
+}
+
+/** 汇总模式：小类层级 */
+export function fetchSummarySubCategoryRecords(categoryName: string, subCategoryName: string): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummarySubCategoryRecords(categoryName, subCategoryName);
+}
+
+/** 汇总模式：进程层级 */
+export function fetchSummaryProcessRecords(processName: string): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryProcessRecords(processName);
+}
+
+/** 汇总模式：线程层级 */
+export function fetchSummaryThreadRecords(processName: string, threadName: string): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryThreadRecords(processName, threadName);
+}
+
+/** 汇总模式：文件层级事件类型（分类模式） */
+export function fetchSummaryFileEventTypeRecords(
+  categoryName: string,
+  subCategoryName: string,
+  fileName: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryFileEventTypeRecords(categoryName, subCategoryName, fileName);
+}
+
+/** 汇总模式：文件层级事件类型（进程模式） */
+export function fetchSummaryFileEventTypeRecordsForProcess(
+  processName: string,
+  threadName: string,
+  fileName: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryFileEventTypeRecordsForProcess(processName, threadName, fileName);
+}
+
+/**
+ * 汇总模式：查询截至跨步骤累计时间点的所有记录（带 stepId，用于火焰图计算未释放内存）
+ */
+export function fetchSummaryRecordsUpToTime(
+  viewMode: 'category' | 'process',
+  relativeTsSeconds: number,
+  categoryName?: string,
+  subCategoryName?: string,
+  processName?: string,
+  threadName?: string,
+  fileName?: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchSummaryRecordsUpToTime(
+    viewMode,
+    relativeTsSeconds,
+    categoryName,
+    subCategoryName,
+    processName,
+    threadName,
+    fileName
+  );
+}
+
+/**
+ * 汇总模式：按 (stepId, callchainId) 批量取调用链帧，以 `${stepId}:${callchainId}` 复合键返回
+ */
+export function fetchSummaryCallchainFrames(
+  entries: Array<{ stepId: number; callchainId: number }>
+): Promise<Record<string, CallchainFrame[]>> {
+  return nativeMemoryService.fetchSummaryCallchainFrames(entries);
+}
+
+/** 汇总模式：按大类统计净内存分布（timeSec 为空时统计全场景所有步骤） */
+export function fetchSummaryCategoryDistribution(timeSec?: number | null): Promise<NativeMemoryDistributionRow[]> {
+  return nativeMemoryService.fetchSummaryCategoryDistribution(timeSec);
+}
+
+/** 汇总模式：按小类（.so / 库文件）统计指定大类下的净内存分布（timeSec 为空时统计全场景所有步骤） */
+export function fetchSummarySubCategoryDistribution(
+  categoryName: string,
+  timeSec?: number | null
+): Promise<NativeMemoryDistributionRow[]> {
+  return nativeMemoryService.fetchSummarySubCategoryDistribution(categoryName, timeSec);
 }

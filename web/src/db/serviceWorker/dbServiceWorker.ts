@@ -29,6 +29,19 @@ export type WorkerMessageType =
   | 'close'
   | 'memory.queryResults'
   | 'memory.queryMeminfo'
+  | 'memory.queryMeminfoAll'
+  | 'memory.queryNetMemoryTimelineAll'
+  | 'memory.queryOverviewTimelineAll'
+  | 'memory.queryCategoryRecordsAll'
+  | 'memory.querySubCategoryRecordsAll'
+  | 'memory.queryFileEventTypeRecordsAll'
+  | 'memory.queryProcessRecordsAll'
+  | 'memory.queryThreadRecordsAll'
+  | 'memory.queryFileEventTypeRecordsForProcessAll'
+  | 'memory.queryRecordsUpToByCategoryAll'
+  | 'memory.queryRecordsUpToByProcessAll'
+  | 'memory.queryCategoryDistributionAll'
+  | 'memory.querySubCategoryDistributionAll'
   | 'memory.queryOverviewTimeline'
   | 'memory.queryCategoryRecords'
   | 'memory.querySubCategoryRecords'
@@ -330,6 +343,154 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
         break;
       }
 
+      case 'memory.queryMeminfoAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const result = await serviceApi.queryMemoryMeminfoAll(db);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryNetMemoryTimelineAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const result = await serviceApi.queryNetMemoryTimelineAll(db);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryOverviewTimelineAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { groupBy } = (payload as { groupBy?: 'category' | 'process' }) || {};
+        const result = await serviceApi.queryOverviewTimelineAll(db, groupBy);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryCategoryRecordsAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { categoryName } = (payload as { categoryName: string }) || {};
+        const result = await serviceApi.queryCategoryRecordsAll(db, categoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.querySubCategoryRecordsAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { categoryName, subCategoryName } = (payload as {
+          categoryName: string;
+          subCategoryName: string;
+        }) || {};
+        const result = await serviceApi.querySubCategoryRecordsAll(db, categoryName, subCategoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryFileEventTypeRecordsAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { categoryName, subCategoryName, fileName } = (payload as {
+          categoryName: string;
+          subCategoryName: string;
+          fileName: string;
+        }) || {};
+        const result = await serviceApi.queryFileEventTypeRecordsAll(db, categoryName, subCategoryName, fileName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryProcessRecordsAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { processName } = (payload as { processName: string }) || {};
+        const result = await serviceApi.queryProcessRecordsAll(db, processName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryThreadRecordsAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { processName, threadName } = (payload as {
+          processName: string;
+          threadName: string;
+        }) || {};
+        const result = await serviceApi.queryThreadRecordsAll(db, processName, threadName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryFileEventTypeRecordsForProcessAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { processName, threadName, fileName } = (payload as {
+          processName: string;
+          threadName: string;
+          fileName: string;
+        }) || {};
+        const result = await serviceApi.queryFileEventTypeRecordsForProcessAll(db, processName, threadName, fileName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryRecordsUpToByCategoryAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { selectedStepId, innerRelativeTs, categoryName, subCategoryName, fileName } = (payload as {
+          selectedStepId: number;
+          innerRelativeTs: number;
+          categoryName?: string;
+          subCategoryName?: string;
+          fileName?: string;
+        }) || {};
+        const result = await serviceApi.queryRecordsUpToTimeByCategoryAll(
+          db,
+          selectedStepId,
+          innerRelativeTs,
+          categoryName,
+          subCategoryName,
+          fileName
+        );
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryRecordsUpToByProcessAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { selectedStepId, innerRelativeTs, processName, threadName, fileName } = (payload as {
+          selectedStepId: number;
+          innerRelativeTs: number;
+          processName?: string;
+          threadName?: string;
+          fileName?: string;
+        }) || {};
+        const result = await serviceApi.queryRecordsUpToTimeByProcessAll(
+          db,
+          selectedStepId,
+          innerRelativeTs,
+          processName,
+          threadName,
+          fileName
+        );
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
       case 'memory.queryOverviewTimeline': {
         if (!db) {
           throw new Error('Database not initialized');
@@ -505,6 +666,33 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
         }
         const { stepId, callchainIds } = (payload as { stepId: number; callchainIds: number[] }) || {};
         const result = await serviceApi.queryCallchainFrames(db, stepId, Array.isArray(callchainIds) ? callchainIds : []);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryCategoryDistributionAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { selectedStepId, innerRelativeTs } = (payload as {
+          selectedStepId?: number;
+          innerRelativeTs?: number;
+        }) || {};
+        const result = await serviceApi.queryCategoryDistributionAll(db, selectedStepId, innerRelativeTs);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.querySubCategoryDistributionAll': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { categoryName, selectedStepId, innerRelativeTs } = (payload as {
+          categoryName: string;
+          selectedStepId?: number;
+          innerRelativeTs?: number;
+        }) || {};
+        const result = await serviceApi.querySubCategoryDistributionAll(db, categoryName, selectedStepId, innerRelativeTs);
         sendSuccessResponse(id, { result });
         break;
       }

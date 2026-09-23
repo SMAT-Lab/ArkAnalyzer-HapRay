@@ -646,6 +646,7 @@ class ReportData:
             'vsyncAnomaly': 'trace_vsyncAnomaly.json',
             'faultTree': 'trace_fault_tree.json',
             'redundantThread': 'redundant_thread_analysis.json',
+            'thermal': 'trace_thermal.json',
         }
 
         for key, filename in trace_files.items():
