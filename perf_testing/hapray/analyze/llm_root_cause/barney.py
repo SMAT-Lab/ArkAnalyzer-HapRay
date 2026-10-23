@@ -59,7 +59,11 @@ types. Never place edge IDs in resource_ids: edges support paths, not resource
 amounts. Prefer sink-local evidence; cross-layer attribution needs a concrete
 dispatch/ownership/source explanation. Rankable hypotheses must have a real
 entry-to-sink path; do not set entry=sink merely to bypass missing reachability.
-Return payload {candidates:[...],source_nodes:[...],edges:[...],caveats:[...]}.
+Symptom-level signals that are not entry-to-sink explanations (frame rate, RS
+skips, faults, reuse) belong in observations:
+[{category,signal,finding,evidence,related_owner,suggested_direction}], at most
+20, kept out of candidates.
+Return payload {candidates:[...],source_nodes:[...],edges:[...],observations:[...],caveats:[...]}.
 At most 12 candidates covering distinct explanations. Do not consult earlier
 predictions, benchmark labels, fixed versions, patches or the internet.
 """
@@ -85,7 +89,14 @@ def _hash(value) -> str:
 def _parse_object(raw: str) -> dict:
     raw = raw.strip()
     if raw.startswith('```'):
-        raw = raw.split('\n', 1)[1].rsplit('```', 1)[0]
+        # Tolerate fenced replies with or without a language tag, on one or
+        # several lines: ```json\n{...}\n``` and ```{...}``` alike.
+        raw = raw[3:]
+        if '\n' in raw:
+            raw = raw.split('\n', 1)[1]
+        raw = raw.rstrip()
+        if raw.endswith('```'):
+            raw = raw[:-3]
     value = json.loads(raw)
     if not isinstance(value, dict):
         raise ValueError('response must be an object')
@@ -120,7 +131,11 @@ def _payload_schema(stage: str) -> dict:
                   'edges': {'type': 'array', 'maxItems': 40, 'items': edge}}
     if stage in {'bridger', 'refine'}:
         properties.update(candidates={'type': 'array', 'maxItems': 12, 'items': candidate},
-                          caveats={'type': 'array', 'items': text})
+                          caveats={'type': 'array', 'items': text},
+                          observations={'type': 'array', 'maxItems': 20, 'items': {
+                              'type': 'object', 'required': ['signal', 'finding'],
+                              'properties': {k: text for k in ('category', 'signal', 'finding', 'evidence',
+                                                               'related_owner', 'suggested_direction')}}})
     else:
         properties['gaps'] = {'type': 'array', 'items': text}
     return {'type': 'object', 'required': ['candidates' if stage in {'bridger', 'refine'} else 'edges'],
@@ -157,7 +172,8 @@ class BarneySession:
             required = 'candidates' if name in {'bridger', 'refine'} else 'edges'
             if not isinstance(payload.get(required), list):
                 raise ValueError(f'{name} requires a {required} array')
-            for field, maximum in [('candidates', 12), ('source_nodes', 24), ('edges', 40)]:
+            for field, maximum in [('candidates', 12), ('source_nodes', 24), ('edges', 40),
+                                   ('observations', 20)]:
                 values = payload.get(field, [])
                 if not isinstance(values, list) or len(values) > maximum or any(not isinstance(v, dict) for v in values):
                     raise ValueError(f'invalid/budget-exceeding {field}')
@@ -245,7 +261,9 @@ def run_barney_analysis(*, report_dir: str, output_path: str, config: dict,
         source = add_source_nodes(graph, payload.get('source_nodes', []), source_dir)
         edges = graph.add_dispatch_edges(payload.get('edges', []))
         audit['stages'][stage] = {'source': source, 'accepted_edges': edges}
-        _dump(graph_path, _graph_snapshot(graph))
+        # The 48MB snapshot is only rewritten when the graph actually changed.
+        if source['accepted'] or edges:
+            _dump(graph_path, _graph_snapshot(graph))
 
     try:
         grapher = session.stage('grapher', GRAPH_INSTRUCTIONS, context, fingerprint, export_only=skip_llm)
@@ -278,14 +296,22 @@ def run_barney_analysis(*, report_dir: str, output_path: str, config: dict,
         for chain in ranking['ranking'][:5]:
             node = graph.nodes[chain['sink']]
             loc = node.get('source') or {}
+            # Unresolved frames carry a blank symbol but a per-library node;
+            # fall back to the library basename so suspects stay readable.
+            library_name = (node.get('library') or '').split('/')[-1]
             suspects.append({'rank': len(suspects) + 1, 'category': chain.get('category', 'cpu-hotspot'),
                              'file': loc.get('source_path', ''), 'line_start': loc.get('line', 0),
-                             'line_end': loc.get('line', 0), 'owner': loc.get('owner_name', ''),
-                             'symbol': loc.get('symbol_name') or node.get('symbol', ''),
+                             'line_end': loc.get('line', 0),
+                             'owner': loc.get('owner_name') or library_name,
+                             'symbol': loc.get('symbol_name') or node.get('symbol') or library_name,
                              'confidence': 'high' if chain['confidence'] >= .8 else 'medium' if chain['confidence'] >= .5 else 'low',
                              'root_cause': chain['mechanism'], 'fix': chain.get('fix', ''),
-                             'trigger_chain': ' → '.join(graph.nodes[n].get('symbol') or n for n in chain['path']),
-                             'problematic_lines': [chain.get('resource_bridge', ''), chain.get('counterevidence', '')],
+                             'trigger_chain': ' → '.join(
+                                 graph.nodes[n].get('symbol')
+                                 or (graph.nodes[n].get('library') or '').split('/')[-1] or n
+                                 for n in chain['path']),
+                             'problematic_lines': [text for text in (chain.get('resource_bridge'),
+                                                                     chain.get('counterevidence')) if text],
                              'evidence_ids': chain['resource_ids'], 'barney_score': chain['score']})
         caveats = list(bridger.get('caveats') or []) + runtime['caveats']
         if ranking['rejected_candidates']:
@@ -293,7 +319,9 @@ def run_barney_analysis(*, report_dir: str, output_path: str, config: dict,
         if any((graph.nodes[c['sink']].get('source') or {}).get('kind') == 'disassembly' for c in ranking['ranking'][:5]):
             caveats.append('Locations ending in .pa are disassembly lines, not original source line numbers.')
         result = {'summary': suspects[0]['root_cause'] if suspects else 'No evidence-supported entry-to-sink explanation.',
-                  'suspects': suspects, 'caveats': caveats, 'needs_more_data': [] if suspects else ['Additional source/dispatch/resource evidence'],
+                  'suspects': suspects,
+                  'observations': [obs for obs in (bridger.get('observations') or []) if isinstance(obs, dict)],
+                  'caveats': caveats, 'needs_more_data': [] if suspects else ['Additional source/dispatch/resource evidence'],
                   'engine': 'barney', 'input_fingerprint': fingerprint}
         _dump(output.parent / (output.stem + '_agent_result.json'), result)
         report = render_to_markdown(RootCauseResult.from_dict(result))
@@ -308,7 +336,10 @@ def run_barney_analysis(*, report_dir: str, output_path: str, config: dict,
         # Preserve the existing skill's complete task/result file contract.
         task_path = output.with_name(output.stem + '_agent_task.json')
         result_path = output.with_name(output.stem + '_agent_result.json')
-        task = json.loads(pending.task.read_text(encoding='utf-8'))
+        try:
+            task = json.loads(pending.task.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            task = {'task_type': 'hapray_barney', 'stage': pending.stage}
         _dump(task_path, {**task, 'result_path': str(result_path), 'pending': True})
         report = ('# Root Cause Analysis (Pending Agent Inference)\n\n'
                   f'Barney stage: `{pending.stage}`.\n\nTask: `{task_path}`\n\n'

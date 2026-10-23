@@ -12,6 +12,7 @@ import hashlib
 import json
 import sqlite3
 from collections import defaultdict
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ def read_capture(db_path: Path, capture_id: str, *, top_per_thread: int = 40) ->
     """
     if top_per_thread < 1:
         raise ValueError('top_per_thread must be positive')
-    with sqlite3.connect(db_path.resolve().as_uri() + '?mode=ro', uri=True) as conn:
+    with closing(sqlite3.connect(db_path.resolve().as_uri() + '?mode=ro', uri=True)) as conn:
         sample_columns = _columns(conn, 'perf_sample')
         clock = next((c for c in ('timestamp_trace', 'timeStamp') if c in sample_columns), None)
         event = 'event_type_id' if 'event_type_id' in sample_columns else 'NULL'
@@ -47,6 +48,7 @@ def read_capture(db_path: Path, capture_id: str, *, top_per_thread: int = 40) ->
             for row in conn.execute('SELECT thread_id, process_id, thread_name FROM perf_thread')
         }
         symbols = {}
+        file_paths: dict[int, str] = {}
         for file_id, serial_id, symbol, path in conn.execute(
             'SELECT file_id, serial_id, symbol, path FROM perf_files ORDER BY id'
         ):
@@ -55,6 +57,8 @@ def read_capture(db_path: Path, capture_id: str, *, top_per_thread: int = 40) ->
             if key in symbols and symbols[key] != value:
                 raise ValueError(f'Ambiguous perf_files key: {key}')
             symbols[key] = value
+            if path:
+                file_paths.setdefault(file_id, path)
         nodes: dict[str, dict[str, Any]] = {}
         chains: dict[int, list[tuple[int, str]]] = defaultdict(list)
         for chain, depth, file_id, serial_id, address in conn.execute(
@@ -63,7 +67,16 @@ def read_capture(db_path: Path, capture_id: str, *, top_per_thread: int = 40) ->
         ):
             symbol, library = symbols.get((file_id, serial_id), ('', ''))
             unresolved = not symbol or symbol in {'[unknown]', 'unknown', '??'}
-            node_id = fact_id('node', library, symbol, address if unresolved else None)
+            if unresolved:
+                # TraceStreamer leaves vaddr_in_file=0 and no perf_files row for
+                # unsymbolized frames; keying them by (library, symbol, address)
+                # collapses every such frame into one global hub node. Keep them
+                # per-file so unresolved frames stay attributable to their library.
+                if not library:
+                    library = file_paths.get(file_id) or f'file_id:{file_id}'
+                node_id = fact_id('node', library, symbol, f'file:{file_id}', address)
+            else:
+                node_id = fact_id('node', library, symbol)
             nodes[node_id] = {'id': node_id, 'symbol': symbol, 'library': library,
                               'address': address if unresolved else None,
                               'source': parse_arkts_source_loc(symbol)}
@@ -145,19 +158,61 @@ def read_capture(db_path: Path, capture_id: str, *, top_per_thread: int = 40) ->
             'resources': selected, 'edges': list(edges.values())}
 
 
+def _capture_cache_key(root: Path, dbs: list[Path], top_per_thread: int) -> str | None:
+    """Fingerprint the perf.db inputs so unchanged databases skip re-aggregation."""
+    parts = []
+    for db in dbs:
+        try:
+            stat = db.stat()
+        except OSError:
+            return None
+        parts.append((db.relative_to(root).as_posix(), stat.st_size, stat.st_mtime_ns))
+    if not parts:
+        return None
+    encoded = json.dumps({'dbs': parts, 'top_per_thread': top_per_thread},
+                         separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def build_runtime_evidence(report_dir: str | Path, *, top_per_thread: int = 40) -> dict[str, Any]:
-    """Build evidence for a HapRay case without collecting or modifying inputs."""
-    root = Path(report_dir).resolve().parent
+    """Build evidence for a HapRay case without collecting or modifying inputs.
+
+    The aggregation is cached beside the report (``root_cause_barney/runtime_cache.json``)
+    keyed by the perf.db file identity and parameters, so resume runs skip
+    re-aggregating unchanged databases.
+    """
+    report_path = Path(report_dir).resolve()
+    root = report_path.parent
+    dbs = sorted(root.glob('hiperf/step*/perf.db'))
+    cache_path = report_path / 'root_cause_barney' / 'runtime_cache.json'
+    cache_key = _capture_cache_key(root, dbs, top_per_thread)
+    if cache_key:
+        try:
+            cached = json.loads(cache_path.read_text(encoding='utf-8'))
+            if isinstance(cached, dict) and cached.get('cache_key') == cache_key:
+                return cached['runtime']
+        except (OSError, ValueError):
+            pass
     captures = []
     errors = []
-    for db in sorted(root.glob('hiperf/step*/perf.db')):
+    for db in dbs:
         capture = db.relative_to(root).as_posix()
         try:
             captures.append(read_capture(db, capture, top_per_thread=top_per_thread))
         except (OSError, sqlite3.Error, ValueError) as exc:
             errors.append({'capture': capture, 'error': f'{type(exc).__name__}: {exc}'})
-    return {'schema_version': 1, 'captures': captures, 'errors': errors,
-            'caveats': ['Sampled ancestry is not proof of a waste mechanism.',
-                        'Missing samples do not prove a method did not execute.',
-                        'Never compare absolute timestamps between captures.',
-                        'Top-per-thread truncation is explicit in each group.']}
+    runtime = {'schema_version': 1, 'captures': captures, 'errors': errors,
+               'caveats': ['Sampled ancestry is not proof of a waste mechanism.',
+                           'Missing samples do not prove a method did not execute.',
+                           'Never compare absolute timestamps between captures.',
+                           'Top-per-thread truncation is explicit in each group.']}
+    if cache_key:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = cache_path.with_suffix(cache_path.suffix + '.tmp')
+            temporary.write_text(json.dumps({'cache_key': cache_key, 'runtime': runtime},
+                                            ensure_ascii=False), encoding='utf-8')
+            temporary.replace(cache_path)
+        except OSError:
+            pass
+    return runtime
