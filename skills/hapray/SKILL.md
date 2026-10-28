@@ -4,17 +4,20 @@ version: "1.5.9"
   description: |
   Guides OpenHarmony/HarmonyOS HapRay performance analysis in six stages:
   setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
+  Component-reuse analysis covers BOTH channels by default: @Reusable (component-reuse signal)
+  and BuilderNode node-pool (NodeContainer+BuilderNode repeated builds, see extension/).
+  setup, perf-collect, high-load analysis (read report/), root-cause (standalone, full), deliverable.
   Memory analysis is a parallel track when --memory is enabled (memory-collect → memory-analysis → memory-deliverable).
   Symbol recovery (update) is triggered when user explicitly requests it or when hotspots are stripped; skipped otherwise.
   PR-Impact is a dual-round comparison workflow when user provides a PR/git identifier + test scenario (build→collect→analyze before, apply changes, build→collect→analyze after, compare).
   Use when the user mentions HapRay, 鸿蒙性能, perf testing, 高负载分析, 内存分析, symbol recovery, root-cause, PR影响, 改动对比, or 性能对比.
-  触发词含：鸿蒙性能、高负载分析、内存分析、内存泄漏、memory leak、空刷根因、符号恢复、PR影响、改动对比、性能对比.
+  触发词含：鸿蒙性能、高负载分析、内存分析、内存泄漏、memory leak、空刷根因、符号恢复、PR影响、改动对比、性能对比、组件复用改造、BuilderNode 复用、节点复用、复用池改造.
   Hard gates: no shell until path_prompt_done; then Read this SKILL plus the current stage doc before CLI.
 ---
 
 # HapRay 引导式工作流
 
-> **包结构**：`SKILL.md` + `workflow/` + `analysis/` + `root-cause/` + `report/` + [`schemas/`](schemas/hapray-tool-result.md)（CLI 契约；发布包无 `docs/` 时以 Schema 为准）。
+> **包结构**：`SKILL.md` + `workflow/` + `analysis/` + `extension/` + `root-cause/` + `report/` + [`schemas/`](schemas/hapray-tool-result.md)（CLI 契约；发布包无 `docs/` 时以 Schema 为准）。
 >
 > **双主线**：high-load（CPU 指令数，默认主线）+ memory（Native 内存，`--memory` 采集时主线）。两者数据源独立、可联合采集（`perf --memory`）后分别分析。
 
@@ -315,6 +318,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | `--memory` 采集 / 内存泄漏 / 未释放 / meminfo | memory（[`analysis/memory-analysis.md`](analysis/memory-analysis.md)） |
 | `trace.db` + 滑动/掉帧 | scroll-jank |
 | `libxxx.so+0x...`（需符号级） | symbol-recovery（触发可选阶段 3 `update --so_dir`） |
+| 组件复用率低 / `NodeContainer+BuilderNode` 反复构建 | 组件复用拓展（**默认检查**）：[`extension/buildernode-reuse.md`](extension/buildernode-reuse.md)——组件复用相关分析默认同时检查 @Reusable 与 BuilderNode 两条通道；改造经用户确认后执行 |
 
 **阶段 5 root-cause**：见 [`root-cause/comprehensive.md`](root-cause/comprehensive.md)（独立 CLI 多信号综合 + Agent 补充深挖）。
 
@@ -341,6 +345,7 @@ bash <SKILL_DIR>/scripts/sync-testcases-to-runtime.sh "<包名>" "<PROJECT_ROOT>
 | 可选符号恢复 | workflow/gen-perf-report |
 | 高负载挖掘（阶段 4 主线） | analysis/* |
 | 内存分析（阶段 4 并列主线） | analysis/memory-analysis |
+| 组件复用拓展（默认检查） | extension/buildernode-reuse |
 | 多信号综合 root-cause（阶段 5，独立） | root-cause/comprehensive |
 | Agent 交付（高负载） | report/analysis-deliverable |
 | Agent 交付（内存专题） | report/memory-deliverable |
