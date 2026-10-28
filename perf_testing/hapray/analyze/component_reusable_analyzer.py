@@ -27,6 +27,9 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
     """
 
     pattern = re.compile(r'^H:CustomNode:BuildItem\s*\[([^\]]*)\]')
+    # BuildRecycle 事件可能带字段：'H:CustomNode:BuildRecycle [Comp][self:x][reuseId:...]'，
+    # 组件名取第一个方括号内容，否则复用计数无法归并到组件名下（ratio 被低估/误报零复用）
+    recycle_pattern = re.compile(r'^H:CustomNode:BuildRecycle\s*\[([^\]]*)\]')
 
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'trace/componentReuse')
@@ -98,6 +101,9 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
         match = self.pattern.search(name)
         if match:
             return match.group(1)
+        recycle_match = self.recycle_pattern.search(name)
+        if recycle_match:
+            return recycle_match.group(1)
         if name.startswith('H:CustomNode:BuildRecycle'):
             return name.split(' ')[1]
         return 'Unknown'

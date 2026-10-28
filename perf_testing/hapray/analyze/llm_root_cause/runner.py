@@ -662,6 +662,14 @@ def _run_agent_fallback(
     return _render_agent_pending_report(task_path, result_path, evidence_report)
 
 
+def _root_cause_engine(llm_config: dict) -> str:
+    engine = str(os.environ.get('HAPRAY_ROOT_CAUSE_ENGINE') or
+                 llm_config.get('analysis', {}).get('engine') or 'barney').lower()
+    if engine not in {'barney', 'legacy'}:
+        raise ValueError(f'Unknown root-cause engine: {engine}')
+    return engine
+
+
 def _root_cause_execution_mode(llm_config: dict) -> str:
     """Return root-cause execution mode: agent (default), api, or auto."""
     raw = (
@@ -918,6 +926,16 @@ def run_empty_frame_analysis(
     enriched_context = context_text
     if module_attribution_text:
         enriched_context = context_text + '\n\n' + module_attribution_text
+
+    if _root_cause_engine(llm_config) == 'barney':
+        from .barney import run_barney_analysis
+
+        return run_barney_analysis(
+            report_dir=report_dir, output_path=output_path, config=llm_config,
+            structured_evidence=structured_evidence, context_text=enriched_context,
+            evidence_report=evidence_report, source_dir=source_dir, skip_llm=skip_llm,
+            execute=_run_agent_command if os.environ.get('HAPRAY_ROOT_CAUSE_AGENT_CMD') else None,
+        )
 
     if not skip_llm:
         execution_mode = _root_cause_execution_mode(llm_config)
@@ -1199,6 +1217,16 @@ def run_comprehensive_analysis(
     structured_evidence = {'mode': 'comprehensive', 'sections': sections}
     evidence_report = _render_comprehensive_evidence(sections, context_text, code_snippets)
 
+    if _root_cause_engine(cfg) == 'barney':
+        from .barney import run_barney_analysis
+
+        return run_barney_analysis(
+            report_dir=report_dir, output_path=output_path, config=cfg,
+            structured_evidence=structured_evidence, context_text=context_text,
+            evidence_report=evidence_report, source_dir=source_dir, skip_llm=skip_llm,
+            execute=_run_agent_command if os.environ.get('HAPRAY_ROOT_CAUSE_AGENT_CMD') else None,
+        )
+
     # 5. Agent / LLM 分析
     final_report: str | None = None
     if not skip_llm:
@@ -1305,6 +1333,15 @@ def apply_agent_result_to_report(report_dir: str | Path) -> bool:
     result_path = report_sub / 'root_cause_agent_result.json'
     if not result_path.is_file():
         return False
+    audit_path = report_sub / 'root_cause_barney' / 'audit.json'
+    if audit_path.is_file():
+        try:
+            audit = json.loads(audit_path.read_text(encoding='utf-8'))
+            result = json.loads(result_path.read_text(encoding='utf-8'))
+            if audit.get('status') != 'complete' or result.get('input_fingerprint') != audit.get('input_fingerprint'):
+                return False
+        except (OSError, ValueError):
+            return False
     rendered = _render_agent_result(result_path, {}, [])
     if not rendered:
         return False
