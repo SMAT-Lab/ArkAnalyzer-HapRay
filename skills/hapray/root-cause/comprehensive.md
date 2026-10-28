@@ -65,7 +65,7 @@ CLI 的 `run_comprehensive_analysis` 按以下信号类别自动提取证据并�
 | `empty-frame` | `trace_emptyFrame.json` | suspect | 空刷帧证据（可选，缺失时跳过） |
 | `cpu-hotspot` | `hiperf/step*/perf.db` | suspect | CPU 高负载热点，含 ArkTS 源码:行 |
 | `frame-load` | `trace_frameLoads.json` | suspect | 高负载帧 |
-| `component-reuse` | `trace_componentReuse.json` | suspect | 低复用率组件 |
+| `component-reuse` | `trace_componentReuse.json` | suspect | 低复用率组件（仅 @Reusable 通道；BuilderNode 节点池通道由 Agent 深挖，见 §〇.2 与 [`../extension/`](../extension/README.md)） |
 | `thread` | `redundant_thread_analysis.json` | suspect | 冗余线程 |
 | `ipc` | `trace_ipc_binder.json` | suspect | 高频 IPC/Binder 事务 |
 | `so-load` | `so_file_load.json` | suspect | SO 文件负载分布 |
@@ -87,7 +87,7 @@ CLI 自动分析受限于 LLM prompt 窗口和证据提取粒度，对以下场�
 | 冗余线程的线程池/Worker 创建点 | 源码中搜索线程创建代码 |
 | IPC 高频事务的调用点 | 源码中搜索 IPC 调用 |
 | 内存超额分配的分配热点 | 源码中搜索大对象/缓存分配；**并参考** [`../analysis/memory-analysis.md`](../analysis/memory-analysis.md) 的未释放 callchain 分析 + meminfo 趋势 + GC 关联做完整内存根因 |
-| 组件复用率低的 LazyForEach/复用配置 | 源码中搜索组件定义与复用配置 |
+| 组件复用率低的 LazyForEach/复用配置 | 源码中搜索组件定义与复用配置；**默认同时检查** `NodeContainer+BuilderNode` 反复构建（另一条复用通道，`component-reuse` 指标反映不出，检查方法见 [`../extension/buildernode-reuse.md`](../extension/buildernode-reuse.md) §〇）；确认适用后建议在根因结论前改造并重采 |
 
 **禁止**：无源码依据的臆造行号；把阶段4未挖出的问题硬写成根因；只复述 CLI 报告而不覆盖其余维度。
 
