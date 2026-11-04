@@ -77,6 +77,14 @@ class RootCauseAction:
             help='Analysis checker: comprehensive (default, multi-signal) or empty-frame (legacy, empty-frame only)',
         )
         parser.add_argument(
+            '--engine',
+            default=None,
+            choices=['barney', 'legacy'],
+            help='Root-cause engine: barney (default, staged evidence-verified graph workflow) '
+            'or legacy (single prompt). Can also be set via HAPRAY_ROOT_CAUSE_ENGINE or '
+            'analysis.engine in the LLM config YAML; this flag takes precedence.',
+        )
+        parser.add_argument(
             '--categories',
             default=None,
             help=(
@@ -165,6 +173,11 @@ class RootCauseAction:
         llm_config = RootCauseAction._load_config(parsed)
         if llm_config is None:
             return (1, '')
+
+        if parsed.engine:
+            # Make the explicit CLI choice authoritative for this run.
+            os.environ['HAPRAY_ROOT_CAUSE_ENGINE'] = parsed.engine
+            logging.info('  Engine     : %s (CLI override)', parsed.engine)
 
         output_path = parsed.output or str(report_dir / 'root_cause.md')
 
